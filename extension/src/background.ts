@@ -5,11 +5,30 @@ import { evaluate, type PolicyLookup } from './core/eligibility'
 import { IneligibleError, planFromManifest, resolveHlsManifest } from './core/plan'
 import { createPolicyLookup, type HostPolicyTable } from './core/policy'
 import { parseRobots, type RobotsRules } from './core/robots'
+import { correlate, type MseContext } from './core/correlate'
 import type { AssemblePlan } from './core/remux'
 import type { HookMessage, MediaCandidate, ManifestModel } from './core/types'
 
 // 탭별 후보 저장(휘발). MV3 SW 종료 대비 storage.session 백업.
 const byTab = new Map<number, Map<string, MediaCandidate>>()
+
+// 탭별 MSE 상관 컨텍스트(MediaSource/SourceBuffer/appendBuffer/media-fetch 관측)
+const mseByTab = new Map<number, MseContext>()
+function mseOf(tabId: number): MseContext {
+  let ctx = mseByTab.get(tabId)
+  if (!ctx) {
+    ctx = { active: false, appendMimes: [], mediaFetchUrls: [] }
+    mseByTab.set(tabId, ctx)
+  }
+  return ctx
+}
+
+// 탭 종료 시 탭 스코프 상태 정리(장수 SW 메모리 누수 방지)
+chrome.tabs?.onRemoved.addListener((tabId) => {
+  byTab.delete(tabId)
+  mseByTab.delete(tabId)
+  void chrome.storage.session.remove(`tab:${tabId}`)
+})
 
 // --- 준법 정책 레이어 (ToS 테이블 + robots.txt 캐시) ---
 let policyTable: HostPolicyTable = {}
@@ -93,8 +112,20 @@ chrome.runtime.onMessage.addListener((msg: HookMessage & { data: unknown }, send
   } else if (msg.type === 'eme') {
     // EME 감지 → 해당 탭 후보에 DRM 신호(보수적 전파)
     markSignal(tabId, { eme: true })
-  } else if (msg.type === 'object-url' || msg.type === 'mse-append' || msg.type === 'media-fetch') {
-    // 세그먼트/blob 상관용 신호 저장(스캐폴드: 로깅 수준)
+  } else if (msg.type === 'object-url') {
+    const d = msg.data as { kind?: string }
+    if (d.kind === 'mediasource') mseOf(tabId).active = true // MSE 재생 표식
+  } else if (msg.type === 'mse-sourcebuffer') {
+    const d = msg.data as { mime?: string }
+    const ctx = mseOf(tabId)
+    ctx.active = true
+    if (d.mime) ctx.appendMimes.push(d.mime)
+  } else if (msg.type === 'mse-append') {
+    const d = msg.data as { mime?: string }
+    if (d.mime) mseOf(tabId).appendMimes.push(d.mime)
+  } else if (msg.type === 'media-fetch') {
+    const d = msg.data as { url?: string }
+    if (d.url) mseOf(tabId).mediaFetchUrls.push(d.url)
   }
   sendResponse?.({ ok: true })
   return true
@@ -103,10 +134,10 @@ chrome.runtime.onMessage.addListener((msg: HookMessage & { data: unknown }, send
 // popup ↔ background RPC (처리하는 메시지에만 채널을 열어둔다)
 chrome.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candidateId?: string }, _s, reply) => {
   if (msg?.rpc === 'list') {
-    const list = [...(byTab.get(msg.tabId!)?.values() ?? [])].map((c) => ({
-      candidate: c,
-      eligibility: evaluate(c, policyOf),
-    }))
+    const raw = [...(byTab.get(msg.tabId!)?.values() ?? [])]
+    // MSE↔세그먼트 상관: blob 숨김 재생을 실제 매니페스트와 연결/정리
+    const correlated = correlate(raw, mseByTab.get(msg.tabId!))
+    const list = correlated.map((c) => ({ candidate: c, eligibility: evaluate(c, policyOf) }))
     reply(list)
     return true
   }

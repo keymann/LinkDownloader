@@ -33,7 +33,7 @@ function render(rows: Row[], tabId: number): void {
             (r) => `<div class="item">
               <div class="meta">
                 <div class="title">${esc(r.candidate.url ?? r.candidate.pageUrl ?? '미디어')} <small>[${KIND_BADGE[r.candidate.kind]}]</small></div>
-                <div class="sub">${esc(r.candidate.origin)}${r.eligibility.verdict !== 'ELIGIBLE' ? ` · <span class="reason">${esc(r.eligibility.reason)}</span>` : ''}</div>
+                <div class="sub">${esc(r.candidate.origin)}${r.candidate.signals.mse ? ' · MSE' : ''}${r.candidate.note ? ` · ${esc(r.candidate.note)}` : ''}${r.eligibility.verdict !== 'ELIGIBLE' ? ` · <span class="reason">${esc(r.eligibility.reason)}</span>` : ''}</div>
               </div>
               ${showBtn ? `<button data-id="${esc(r.candidate.id)}">저장</button>` : ''}
             </div>`,

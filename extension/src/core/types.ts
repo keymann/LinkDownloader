@@ -50,6 +50,7 @@ export interface MediaSignals {
   cors?: 'allow' | 'deny' | 'unknown'
   acceptRanges?: boolean
   isLive?: boolean
+  mse?: boolean // MSE(blob)로 재생되는 스트림과 상관됨
 }
 
 export interface MediaCandidate {
@@ -65,6 +66,7 @@ export interface MediaCandidate {
   headers?: Record<string, string>
   manifest?: ManifestModel
   signals: MediaSignals
+  note?: string // UI 표시용 부가 설명(예: MSE/blob 상관 결과)
 }
 
 export type Verdict = 'ELIGIBLE' | 'CONDITIONAL' | 'INELIGIBLE' | 'SKIP'

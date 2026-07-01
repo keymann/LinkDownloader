@@ -60,7 +60,10 @@ npm run watch          # 개발 중 자동 재빌드
       — `core/robots`(REP 파서/매처) + `core/policy`(ToS 테이블+robots 캐시→PolicyLookup),
       background가 호스트별 robots.txt fetch·캐시, 다운로드 시 robots 강제. 정책 테이블은
       `storage.local.policyTable`(호스트별 `forbidsDownload`)로 관리.
-- [ ] blob↔세그먼트 상관(MSE append ↔ media-fetch) 정밀화
+- [x] blob↔세그먼트 상관(MSE append ↔ media-fetch)
+      — `core/correlate`가 같은 탭의 MSE(blob) 재생을 실제 매니페스트와 연결(중복 blob 제거,
+      매니페스트를 대표로 표기). 매니페스트 없이 세그먼트만 관측되면 사유(재조합 불가)와 함께 CONDITIONAL.
+      background가 object-url/mse-sourcebuffer/mse-append/media-fetch를 탭별 컨텍스트로 수집.
 - [ ] 아이콘·개인정보 처리방침·스토어 심사 자료
 - [ ] Firefox(`browser.*` 폴리필)·Safari 대응
 
