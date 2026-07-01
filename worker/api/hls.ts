@@ -1,4 +1,3 @@
-import type { Env } from '../lib/auth'
 import { assertSafeUrl, BROWSER_UA, error, json } from '../lib/http'
 
 // m3u8 를 파싱해 세그먼트(.ts) URL 목록을 반환한다.
@@ -41,7 +40,7 @@ function parseMedia(text: string, base: string): string[] {
   return segs
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request }) => {
+export async function handleHls(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const target = url.searchParams.get('url')
   if (!target) return error(400, 'url 파라미터가 필요합니다.')

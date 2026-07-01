@@ -1,22 +1,22 @@
-# 이 프로젝트는 Cloudflare **Pages** 프로젝트다 (Workers 아님).
-#
-# 권장 배포: Cloudflare 대시보드에서 Git 저장소를 연결한 "네이티브 Pages 자동 배포".
-#   - Build command          : npm run build
-#   - Build output directory  : dist   (아래 pages_build_output_dir 와 동일)
-#   - Deploy command          : (설정하지 않음 — 비워둠)
-#   - CLOUDFLARE_API_TOKEN    : (환경변수 불필요 — 제거)
-#   → Cloudflare 가 빌드 산출물(dist)과 functions/ 를 자체 자격증명으로 자동 배포하므로
-#     커스텀 토큰/배포 명령이 필요 없다. (커스텀 토큰 사용 시 Pages:Edit 권한 부족으로
-#     "Authentication error [code: 10000]" 발생)
-#
-# 수동 CLI 배포가 필요하면(로컬에서 `wrangler login` 후): npm run deploy
+# 이 프로젝트는 Cloudflare **Workers** 프로젝트다 (static assets 모델).
+# 배포: `wrangler deploy` (Workers). 대시보드 Workers 빌드 설정:
+#   - Build command : npm run build   (dist 생성)
+#   - Deploy command: npx wrangler deploy
+#   → Workers Builds가 자동 주입하는 토큰이 Workers 배포 권한을 가지므로 별도 토큰 불필요.
 name = "link-downloader"
+main = "worker/index.ts"
 compatibility_date = "2024-09-23"
-pages_build_output_dir = "dist"
 
-# KV 네임스페이스 바인딩. 로컬(`wrangler pages dev`)은 자동으로 로컬 KV를 사용한다.
-# 프로덕션 배포 전 `wrangler kv namespace create LINKDL_KV`로 생성 후 아래 id를 채운다.
+# 정적 자산(빌드된 dist)을 서빙. Worker가 먼저 실행되어 /api/* 를 처리하고,
+# 그 외에는 env.ASSETS 로 위임하며 매칭이 없으면 index.html 로 SPA 폴백한다.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+# KV 네임스페이스 바인딩. 로컬(`wrangler dev`)은 자동으로 로컬 KV를 사용한다.
 [[kv_namespaces]]
 binding = "LINKDL_KV"
 id = "7646327020a142b68c982ea3cfda9f3d"          # 프로덕션
-preview_id = "83c9668bfe47445cbc4f893f424dec88"  # 프리뷰(브랜치/PR 배포)
+preview_id = "83c9668bfe47445cbc4f893f424dec88"  # 프리뷰

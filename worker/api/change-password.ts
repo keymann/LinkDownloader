@@ -1,9 +1,8 @@
 import { checkCredentials, setUserPassword, type Env } from '../lib/auth'
 import { error, json } from '../lib/http'
 
-// 요구사항 7: 비밀번호 변경. 미들웨어에서 인증된 사용자만 도달한다.
-export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) => {
-  const user = data.user as string
+// 요구사항 7: 비밀번호 변경. 라우터에서 인증된 사용자(user)만 도달한다.
+export async function handleChangePassword(request: Request, env: Env, user: string): Promise<Response> {
   let body: { currentPassword?: string; newPassword?: string }
   try {
     body = await request.json()

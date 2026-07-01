@@ -24,13 +24,12 @@ async function writeHistory(env: Env, user: string, items: HistoryItem[]): Promi
   await env.LINKDL_KV.put(historyKey(user), JSON.stringify(items.slice(0, MAX_ITEMS)))
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ env, data }) => {
-  const items = await readHistory(env, data.user as string)
+export async function handleHistoryGet(_request: Request, env: Env, user: string): Promise<Response> {
+  const items = await readHistory(env, user)
   return json({ items })
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) => {
-  const user = data.user as string
+export async function handleHistoryPost(request: Request, env: Env, user: string): Promise<Response> {
   let body: Partial<HistoryItem>
   try {
     body = await request.json()
@@ -57,8 +56,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, data }) 
   return json({ item })
 }
 
-export const onRequestDelete: PagesFunction<Env> = async ({ request, env, data }) => {
-  const user = data.user as string
+export async function handleHistoryDelete(request: Request, env: Env, user: string): Promise<Response> {
   const url = new URL(request.url)
   const id = url.searchParams.get('id')
   if (!id) {

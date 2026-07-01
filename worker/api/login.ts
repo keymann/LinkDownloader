@@ -1,7 +1,7 @@
 import { checkCredentials, createSession, sessionCookieHeader, type Env } from '../lib/auth'
 import { error, json } from '../lib/http'
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export async function handleLogin(request: Request, env: Env): Promise<Response> {
   let body: { username?: string; password?: string }
   try {
     body = await request.json()

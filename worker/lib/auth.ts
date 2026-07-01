@@ -3,6 +3,8 @@ import { hashPassword, randomHex, verifyPassword } from './crypto'
 
 export interface Env {
   LINKDL_KV: KVNamespace
+  // 정적 자산(빌드된 dist) 서빙용 바인딩 (wrangler.toml [assets].binding)
+  ASSETS: Fetcher
 }
 
 interface UserRecord {

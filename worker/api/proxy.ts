@@ -1,8 +1,7 @@
-import type { Env } from '../lib/auth'
 import { assertSafeUrl, BROWSER_UA, error } from '../lib/http'
 
 // CORS 우회 스트리밍 프록시. Range 헤더를 전달하고 응답을 그대로 스트리밍한다.
-export const onRequestGet: PagesFunction<Env> = async ({ request }) => {
+export async function handleProxy(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const target = url.searchParams.get('url')
   if (!target) return error(400, 'url 파라미터가 필요합니다.')
