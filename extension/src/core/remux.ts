@@ -55,6 +55,58 @@ function concat(parts: Uint8Array[]): Blob {
   return new Blob(parts as BlobPart[])
 }
 
+// plan → 순서 보존 세그먼트 목록(스트리밍 재조합용)
+export function planToSegments(plan: AssemblePlan): SegmentRef[] {
+  switch (plan.mode) {
+    case 'progressive':
+      return [{ url: plan.url }]
+    case 'fmp4-concat':
+      return plan.init ? [plan.init, ...plan.media] : plan.media
+    case 'ts-concat':
+      return plan.media
+    case 'separate-tracks': {
+      // 기본은 첫(비디오) 트랙 스트리밍. 단일 파일 병합은 remux() 필요.
+      const t = plan.tracks[0]
+      return t.init ? [t.init, ...t.media] : t.media
+    }
+  }
+}
+
+// 스트리밍 재조합: 각 세그먼트 응답 본문을 순서대로 write 콜백에 흘려보낸다(상수 메모리).
+// docs/research/07 §7.4, 11 §5. write는 OPFS WritableStream 등 디스크 싱크에 연결한다.
+export async function assembleToWriter(
+  plan: AssemblePlan,
+  write: (chunk: Uint8Array) => Promise<void>,
+  opts: AssembleOpts = {},
+): Promise<number> {
+  const f = opts.fetchImpl ?? fetch
+  const segs = planToSegments(plan)
+  let bytes = 0
+  for (let i = 0; i < segs.length; i++) {
+    if (opts.signal?.aborted) throw new DOMException('aborted', 'AbortError')
+    const seg = segs[i]
+    const res = await f(seg.url, { headers: rangeHeader(seg.byteRange), signal: opts.signal })
+    if (!res.ok && res.status !== 206) throw new Error(`세그먼트 실패 ${res.status}: ${seg.url}`)
+    if (res.body) {
+      const reader = res.body.getReader()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value) {
+          await write(value)
+          bytes += value.byteLength
+        }
+      }
+    } else {
+      const buf = new Uint8Array(await res.arrayBuffer())
+      await write(buf)
+      bytes += buf.byteLength
+    }
+    opts.onProgress?.(i + 1, segs.length, bytes)
+  }
+  return bytes
+}
+
 // 기본 경로: concat → Blob 반환(대용량은 스트리밍 저장 권장, 11 §5 참조)
 export async function assemble(plan: AssemblePlan, opts: AssembleOpts = {}): Promise<Blob> {
   switch (plan.mode) {
