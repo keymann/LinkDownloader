@@ -24,6 +24,13 @@
 | 7 | [07-performance-optimization.md](./07-performance-optimization.md) | 성능 최적화 전략 |
 | 8 | [08-maintenance-strategy.md](./08-maintenance-strategy.md) | 유지보수 전략 |
 
+### 심화(Deep-dive) 문서
+
+| # | 문서 | 내용 |
+|---|---|---|
+| 9 | [09-parser-spec.md](./09-parser-spec.md) | Playlist Parser 상세 스펙 (HLS/DASH 렉싱·문법·데이터 모델·SegmentTemplate/Timeline 확장·암호화 신호 추출·엣지케이스·테스트 벡터) |
+| 10 | [10-extension-design.md](./10-extension-design.md) | 브라우저 확장(MV3) 설계 (월드 구조·manifest·MSE/Blob 후킹·webRequest·다운로드·UI·호환성·스토어 준법) |
+
 ## 용어
 
 | 약어 | 의미 |
