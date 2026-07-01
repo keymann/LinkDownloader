@@ -1,4 +1,3 @@
-import type { Env } from '../lib/auth'
 import { assertSafeUrl, BROWSER_UA, error, json } from '../lib/http'
 import { extractSources, type VideoSource } from '../lib/htmlparse'
 
@@ -27,7 +26,7 @@ async function enrich(source: VideoSource): Promise<EnrichedSource> {
   }
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request }) => {
+export async function handleExtract(request: Request): Promise<Response> {
   let body: { url?: string }
   try {
     body = await request.json()

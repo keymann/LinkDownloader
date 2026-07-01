@@ -11,9 +11,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // 로컬 개발 시 `wrangler pages dev`(기본 8788)로 Functions를 띄워두고 /api 프록시.
+    // 로컬 개발 시 `wrangler dev`(기본 8787)로 Worker를 띄워두고 /api 프록시.
     proxy: {
-      '/api': 'http://127.0.0.1:8788',
+      '/api': 'http://127.0.0.1:8787',
     },
   },
 })
