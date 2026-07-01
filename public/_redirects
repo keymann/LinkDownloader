@@ -1,0 +1,3 @@
+# SPA fallback: 클라이언트 라우트(/history, /settings 등) 새로고침 시 index.html 제공.
+# Cloudflare Pages Functions(/api/*)가 이 규칙보다 우선 처리되므로 API는 영향받지 않는다.
+/*    /index.html   200
