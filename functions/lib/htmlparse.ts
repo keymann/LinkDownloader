@@ -7,6 +7,8 @@ export interface VideoSource {
   url: string
   kind: SourceKind
   label: string
+  // 개별 후보의 미리보기(주로 <video poster>). 없으면 UI에서 페이지 썸네일로 대체.
+  poster?: string | null
 }
 
 export interface ExtractResult {
@@ -52,12 +54,13 @@ export function extractSources(html: string, pageUrl: string): ExtractResult {
   const sources: VideoSource[] = []
   const seen = new Set<string>()
 
-  const add = (rawUrl: string | null, label: string) => {
+  const add = (rawUrl: string | null, label: string, poster?: string | null) => {
     if (!rawUrl) return
     const abs = resolveUrl(pageUrl, rawUrl)
     if (!abs || seen.has(abs)) return
     seen.add(abs)
-    sources.push({ url: abs, kind: kindForUrl(abs), label })
+    const posterAbs = poster ? resolveUrl(pageUrl, poster) : null
+    sources.push({ url: abs, kind: kindForUrl(abs), label, poster: posterAbs })
   }
 
   // 제목
@@ -71,14 +74,17 @@ export function extractSources(html: string, pageUrl: string): ExtractResult {
       metaContent(html, 'name', 'twitter:image') ||
       null)
 
-  // 1) <video> src, poster & 하위 <source>
+  // 1) <video> src, poster & 하위 <source>. 각 <video> 블록마다 별개 동영상으로 취급하고
+  //    해당 블록의 poster 를 후보 미리보기로 붙인다(여러 동영상 구분에 도움).
   const videoTags = html.match(/<video[\s\S]*?<\/video>/gi) || []
-  for (const block of videoTags) {
+  videoTags.forEach((block, i) => {
     const openTag = block.match(/<video[^>]*>/i)?.[0] || ''
-    add(attr(openTag, 'src'), '<video> 태그')
+    const poster = attr(openTag, 'poster')
+    const nth = videoTags.length > 1 ? ` #${i + 1}` : ''
+    add(attr(openTag, 'src'), `<video> 태그${nth}`, poster)
     const sourceTags = block.match(/<source[^>]*>/gi) || []
-    for (const st of sourceTags) add(attr(st, 'src'), '<source> 태그')
-  }
+    for (const st of sourceTags) add(attr(st, 'src'), `<source> 태그${nth}`, poster)
+  })
   // 페이지 전역의 독립 <source> (일부 사이트)
   for (const st of html.match(/<source[^>]*>/gi) || []) {
     const t = attr(st, 'type') || ''

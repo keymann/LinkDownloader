@@ -484,6 +484,114 @@ select:focus {
   font-size: 13px;
 }
 
+/* ---------- 다중 동영상 후보 선택 ---------- */
+.candidates {
+  margin-bottom: 16px;
+}
+.candidates-head {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.candidates-head strong {
+  color: var(--text);
+}
+.candidate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.candidate {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.candidate:hover {
+  border-color: var(--primary-hover);
+}
+.candidate.active {
+  border-color: var(--primary);
+  background: rgba(79, 140, 255, 0.1);
+}
+.candidate-thumb {
+  width: 76px;
+  height: 50px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--bg-elev-2);
+  flex-shrink: 0;
+}
+.candidate-thumb.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.candidate-info {
+  min-width: 0;
+  flex: 1;
+}
+.candidate-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.radio-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+}
+.candidate.active .radio-dot {
+  border-color: var(--primary);
+  background:
+    radial-gradient(circle, var(--primary) 0 40%, transparent 45%);
+}
+.candidate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.candidate-url {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge.kind-file {
+  background: rgba(53, 196, 138, 0.18);
+  color: var(--ok);
+}
+.badge.kind-hls {
+  background: rgba(79, 140, 255, 0.18);
+  color: var(--primary-hover);
+}
+.badge.kind-dash {
+  background: rgba(147, 160, 189, 0.2);
+  color: var(--muted);
+}
+
 /* ---------- Tablet (>=640) : side rail ---------- */
 @media (min-width: 640px) {
   .layout {

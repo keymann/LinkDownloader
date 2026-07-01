@@ -16,6 +16,12 @@ const KIND_LABEL: Record<VideoSource['kind'], string> = {
   dash: 'DASH (.mpd)',
 }
 
+const KIND_BADGE: Record<VideoSource['kind'], string> = {
+  file: 'MP4',
+  hls: 'HLS',
+  dash: 'DASH',
+}
+
 export function DownloadDialog({ result, onClose }: Props) {
   const { startDownload, supportsLocationPicker } = useDownloads()
   const [selected, setSelected] = useState(0)
@@ -24,13 +30,14 @@ export function DownloadDialog({ result, onClose }: Props) {
   const [probing, setProbing] = useState(false)
 
   const source = result?.sources[selected]
+  const multiple = (result?.sources.length ?? 0) > 1
 
   useEffect(() => {
     setSelected(0)
     setEta(null)
   }, [result])
 
-  // 사전 예상 시간: 파일형 소스에 한해 대역폭을 측정해 추정
+  // 사전 예상 시간: 파일형 소스에 한해 대역폭을 측정해 추정. 선택이 바뀌면 재측정.
   useEffect(() => {
     if (!result || !source || source.kind !== 'file' || !source.size) {
       setEta(null)
@@ -38,6 +45,7 @@ export function DownloadDialog({ result, onClose }: Props) {
     }
     let alive = true
     setProbing(true)
+    setEta(null)
     probeBandwidth(source.url)
       .then((bps) => {
         if (alive && bps) setEta(source.size! / bps)
@@ -67,6 +75,8 @@ export function DownloadDialog({ result, onClose }: Props) {
     }
   }
 
+  const previewImg = source?.poster || result.thumbnail
+
   return (
     <Modal
       open={!!result}
@@ -93,14 +103,61 @@ export function DownloadDialog({ result, onClose }: Props) {
         </div>
       ) : (
         <>
+          {/* 2개 이상이면 어떤 동영상을 받을지 선택하는 목록을 먼저 보여준다 */}
+          {multiple && (
+            <div className="candidates">
+              <div className="candidates-head">
+                이 페이지에서 <strong>{result.sources.length}개</strong>의 동영상을 찾았습니다. 다운로드할 항목을 선택하세요.
+              </div>
+              <ul className="candidate-list" role="radiogroup" aria-label="동영상 선택">
+                {result.sources.map((s, i) => {
+                  const active = i === selected
+                  const img = s.poster || result.thumbnail
+                  return (
+                    <li key={s.url}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        className={active ? 'candidate active' : 'candidate'}
+                        onClick={() => setSelected(i)}
+                      >
+                        {img ? (
+                          <img className="candidate-thumb" src={img} alt="" loading="lazy" />
+                        ) : (
+                          <div className="candidate-thumb placeholder">🎬</div>
+                        )}
+                        <div className="candidate-info">
+                          <div className="candidate-title">
+                            <span className="radio-dot" aria-hidden="true" />
+                            동영상 {i + 1}
+                            <span className={`badge kind-${s.kind}`}>{KIND_BADGE[s.kind]}</span>
+                          </div>
+                          <div className="candidate-meta">
+                            <span>{s.label}</span>
+                            <span>{s.kind === 'file' ? formatBytes(s.size) : '스트림'}</span>
+                          </div>
+                          <div className="candidate-url" title={s.url}>{s.url}</div>
+                        </div>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+
+          {/* 선택된 동영상 요약(단일 동영상이면 이 영역만 표시) */}
           <div className="dialog-preview">
-            {result.thumbnail ? (
-              <img className="dialog-thumb" src={result.thumbnail} alt="" />
+            {previewImg ? (
+              <img className="dialog-thumb" src={previewImg} alt="" />
             ) : (
               <div className="dialog-thumb placeholder">🎬</div>
             )}
             <div className="dialog-info">
-              <div className="dialog-name" title={result.title}>{result.title}</div>
+              <div className="dialog-name" title={result.title}>
+                {multiple ? `선택: 동영상 ${selected + 1}` : result.title}
+              </div>
               <div className="dialog-stats">
                 <div>
                   <span className="muted">유형</span> {KIND_LABEL[source!.kind]}
@@ -122,20 +179,6 @@ export function DownloadDialog({ result, onClose }: Props) {
               </div>
             </div>
           </div>
-
-          {result.sources.length > 1 && (
-            <div className="field">
-              <label className="field-label">소스 선택</label>
-              <select value={selected} onChange={(e) => setSelected(Number(e.target.value))}>
-                {result.sources.map((s, i) => (
-                  <option key={s.url} value={i}>
-                    {KIND_LABEL[s.kind]} · {s.label}
-                    {s.size ? ` · ${formatBytes(s.size)}` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           <div className="field">
             {supportsLocationPicker ? (
