@@ -50,8 +50,10 @@ npm run watch          # 개발 중 자동 재빌드
 - [x] DASH offscreen 파서(`chrome.offscreen` + `core/dash.parseDash`) 연결
       — `src/offscreen.ts`(+`offscreen.html`)에서 `parseDash` 수행, `background.ts`가
       `ensureOffscreen()`/`parseDashViaOffscreen()`로 위임. `offscreen` 권한 추가.
-- [ ] HLS master→media 2차 fetch/파싱 체인
-- [ ] `core/remux.assemble`로 세그먼트 재조합(스트리밍 저장/OPFS), 대용량 대응
+- [x] HLS master→media 2차 fetch/파싱 체인 (`core/plan.resolveHlsManifest`)
+- [x] `core/remux.assemble`로 세그먼트 재조합 + 다운로드 배선
+      (offscreen에서 fetch+concat→Blob→blobURL, background가 `chrome.downloads`로 저장 후 revoke)
+- [ ] 대용량 스트리밍 저장(OPFS/`WritableStream`)로 메모리 피크 제거(현재 Blob 조립)
 - [ ] robots/ToS 정책 테이블 로드(`chrome.storage.local`) 및 준법 검토 프로세스
 - [ ] blob↔세그먼트 상관(MSE append ↔ media-fetch) 정밀화
 - [ ] 아이콘·개인정보 처리방침·스토어 심사 자료
