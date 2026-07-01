@@ -56,7 +56,10 @@ npm run watch          # 개발 중 자동 재빌드
 - [x] 대용량 스트리밍 저장(OPFS/`WritableStream`)로 메모리 피크 제거
       — offscreen이 `assembleToWriter`로 세그먼트를 OPFS 파일에 순차 스트리밍(상수 메모리),
       디스크 기반 File→blobURL로 다운로드, 완료 시 revoke+파일 삭제. OPFS 미지원 시 Blob 폴백.
-- [ ] robots/ToS 정책 테이블 로드(`chrome.storage.local`) 및 준법 검토 프로세스
+- [x] robots/ToS 정책 테이블 로드(`chrome.storage.local`) 및 준법 검토 프로세스
+      — `core/robots`(REP 파서/매처) + `core/policy`(ToS 테이블+robots 캐시→PolicyLookup),
+      background가 호스트별 robots.txt fetch·캐시, 다운로드 시 robots 강제. 정책 테이블은
+      `storage.local.policyTable`(호스트별 `forbidsDownload`)로 관리.
 - [ ] blob↔세그먼트 상관(MSE append ↔ media-fetch) 정밀화
 - [ ] 아이콘·개인정보 처리방침·스토어 심사 자료
 - [ ] Firefox(`browser.*` 폴리필)·Safari 대응

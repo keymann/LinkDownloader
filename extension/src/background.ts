@@ -3,14 +3,54 @@
 import { parseHls } from './core/hls'
 import { evaluate, type PolicyLookup } from './core/eligibility'
 import { IneligibleError, planFromManifest, resolveHlsManifest } from './core/plan'
+import { createPolicyLookup, type HostPolicyTable } from './core/policy'
+import { parseRobots, type RobotsRules } from './core/robots'
 import type { AssemblePlan } from './core/remux'
 import type { HookMessage, MediaCandidate, ManifestModel } from './core/types'
 
 // 탭별 후보 저장(휘발). MV3 SW 종료 대비 storage.session 백업.
 const byTab = new Map<number, Map<string, MediaCandidate>>()
 
-// TODO(준법): ToS/robots 정책 테이블을 storage.local에서 로드. 기본은 정책 없음(안전 측 판단은 eligibility가 담당).
-const policyOf: PolicyLookup = () => undefined
+// --- 준법 정책 레이어 (ToS 테이블 + robots.txt 캐시) ---
+let policyTable: HostPolicyTable = {}
+const robotsCache = new Map<string, RobotsRules>()
+const robotsInflight = new Map<string, Promise<void>>()
+// 살아있는 참조를 넘겨 갱신을 반영. eligibility가 forbidsDownload/robotsDisallow를 소비.
+const policyOf: PolicyLookup = (host) => createPolicyLookup(policyTable, robotsCache)(host)
+
+// storage.local의 policyTable 로드 + 변경 반영
+void chrome.storage.local.get('policyTable').then((r) => {
+  if (r.policyTable) policyTable = r.policyTable as HostPolicyTable
+})
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.policyTable) policyTable = (changes.policyTable.newValue ?? {}) as HostPolicyTable
+})
+
+function hostOf(u?: string): string {
+  try {
+    return u ? new URL(u).host : ''
+  } catch {
+    return ''
+  }
+}
+
+// 호스트별 robots.txt 1회 fetch·파싱·캐시(404/실패는 빈 규칙=허용). 중복 요청 방지.
+async function ensureRobots(host: string): Promise<void> {
+  if (!host || robotsCache.has(host)) return
+  if (robotsInflight.has(host)) return robotsInflight.get(host)
+  const p = (async () => {
+    try {
+      const res = await fetch(`https://${host}/robots.txt`)
+      robotsCache.set(host, res.ok ? parseRobots(await res.text()) : { groups: [] })
+    } catch {
+      robotsCache.set(host, { groups: [] })
+    } finally {
+      robotsInflight.delete(host)
+    }
+  })()
+  robotsInflight.set(host, p)
+  return p
+}
 
 function upsert(tabId: number, c: MediaCandidate): void {
   if (!byTab.has(tabId)) byTab.set(tabId, new Map())
@@ -19,6 +59,8 @@ function upsert(tabId: number, c: MediaCandidate): void {
   map.set(c.id, prev ? { ...prev, ...c, signals: { ...prev.signals, ...c.signals } } : c)
   void chrome.storage.session.set({ [`tab:${tabId}`]: [...map.values()] })
   void chrome.action.setBadgeText({ tabId, text: String(map.size) })
+  // robots를 미리 받아둬 list 판정 시 반영되도록(fire-and-forget)
+  void ensureRobots(hostOf(c.url ?? c.pageUrl))
 }
 
 // --- 네트워크 관찰 (관찰 전용, 차단/변조 없음) ---
@@ -109,6 +151,8 @@ async function buildPlan(c: MediaCandidate): Promise<AssemblePlan> {
 }
 
 async function startDownload(c: MediaCandidate): Promise<void> {
+  // 다운로드 시점엔 robots를 확실히 로드해 정책을 강제한다(list는 캐시 기반 근사)
+  await ensureRobots(hostOf(c.url ?? c.pageUrl))
   const verdict = evaluate(c, policyOf)
   if (verdict.verdict !== 'ELIGIBLE') {
     notify('다운로드 불가', `${verdict.verdict}: ${verdict.reason}`)
