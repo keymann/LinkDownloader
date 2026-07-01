@@ -133,7 +133,7 @@ chrome.runtime.onMessage.addListener((msg: HookMessage & { data: unknown }, send
 })
 
 // popup ↔ background RPC (처리하는 메시지에만 채널을 열어둔다)
-chrome.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candidateId?: string }, _s, reply) => {
+chrome.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candidateId?: string; jobId?: string }, _s, reply) => {
   if (msg?.rpc === 'list') {
     const raw = [...(byTab.get(msg.tabId!)?.values() ?? [])]
     // MSE↔세그먼트 상관: blob 숨김 재생을 실제 매니페스트와 연결/정리
@@ -150,6 +150,11 @@ chrome.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candi
   }
   if (msg?.rpc === 'jobs') {
     reply([...jobs.values()].filter((j) => j.tabId === msg.tabId))
+    return true
+  }
+  if (msg?.rpc === 'cancel' && msg.jobId) {
+    void cancelJob(msg.jobId)
+    reply({ ok: true })
     return true
   }
   return false
@@ -181,6 +186,8 @@ chrome.runtime.onMessage.addListener((msg: { type?: string; jobId?: string; done
 // 완료 시 offscreen blob URL 해제 + 작업 상태 종료
 const pendingBlob = new Map<number, string>() // downloadId → blobUrl
 const downloadJob = new Map<number, string>() // downloadId → jobId
+const jobDownloadId = new Map<string, number>() // jobId → downloadId
+const canceledJobs = new Set<string>() // 사용자가 취소한 job
 chrome.downloads?.onChanged.addListener((delta) => {
   const s = delta.state?.current
   if (s !== 'complete' && s !== 'interrupted') return
@@ -191,10 +198,27 @@ chrome.downloads?.onChanged.addListener((delta) => {
   }
   const jid = downloadJob.get(delta.id)
   if (jid) {
-    patchJob(jid, { phase: s === 'complete' ? 'done' : 'error', error: s === 'interrupted' ? '중단됨' : undefined })
+    const phase = canceledJobs.has(jid) ? 'canceled' : s === 'complete' ? 'done' : 'error'
+    patchJob(jid, { phase, error: phase === 'error' ? '중단됨' : undefined })
     downloadJob.delete(delta.id)
+    jobDownloadId.delete(jid)
+    canceledJobs.delete(jid)
   }
 })
+
+// 진행 중 다운로드 취소: 재조합 중이면 offscreen abort, 저장 중이면 downloads.cancel
+async function cancelJob(jobId: string): Promise<void> {
+  const j = jobs.get(jobId)
+  if (!j || j.phase === 'done' || j.phase === 'error' || j.phase === 'canceled') return
+  canceledJobs.add(jobId)
+  if (j.phase === 'downloading') {
+    const dlId = jobDownloadId.get(jobId)
+    if (dlId != null) await chrome.downloads.cancel(dlId).catch(() => {})
+  } else if (j.phase === 'assembling') {
+    void chrome.runtime.sendMessage({ target: 'offscreen', kind: 'cancel', jobId })
+  }
+  patchJob(jobId, { phase: 'canceled' })
+}
 
 // 후보 → AssemblePlan (HLS master→media 해석 / DASH offscreen 파싱)
 async function buildPlan(c: MediaCandidate): Promise<AssemblePlan> {
@@ -228,6 +252,7 @@ async function startDownload(c: MediaCandidate, tabId: number): Promise<void> {
   if (isFile) {
     const id = await chrome.downloads.download({ url: c.url!, filename: title })
     downloadJob.set(id, jobId)
+    jobDownloadId.set(jobId, id)
     return
   }
   // HLS/DASH: 계획 수립 → offscreen에서 재조합(진행률 emit) → background에서 다운로드
@@ -235,14 +260,25 @@ async function startDownload(c: MediaCandidate, tabId: number): Promise<void> {
     const plan = await buildPlan(c)
     await ensureOffscreen()
     const res = (await chrome.runtime.sendMessage({ target: 'offscreen', kind: 'assemble', plan, jobId })) as
-      | { ok: boolean; blobUrl?: string; error?: string }
+      | { ok: boolean; blobUrl?: string; error?: string; aborted?: boolean }
       | undefined
+    if (res?.aborted || canceledJobs.has(jobId)) {
+      patchJob(jobId, { phase: 'canceled' })
+      canceledJobs.delete(jobId)
+      return
+    }
     if (!res?.ok || !res.blobUrl) throw new Error(res?.error || '세그먼트 재조합 실패')
     patchJob(jobId, { phase: 'downloading' })
     const id = await chrome.downloads.download({ url: res.blobUrl, filename: title })
     pendingBlob.set(id, res.blobUrl)
     downloadJob.set(id, jobId)
+    jobDownloadId.set(jobId, id)
   } catch (e) {
+    if (canceledJobs.has(jobId)) {
+      patchJob(jobId, { phase: 'canceled' })
+      canceledJobs.delete(jobId)
+      return
+    }
     const reason = e instanceof IneligibleError ? `INELIGIBLE: ${e.reason}` : (e as Error).message
     patchJob(jobId, { phase: 'error', error: reason })
     notify(e instanceof IneligibleError ? '다운로드 불가' : '다운로드 오류', reason)

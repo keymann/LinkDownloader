@@ -83,7 +83,7 @@ export interface DownloadJob {
   tabId: number
   candidateId: string
   title: string
-  phase: 'assembling' | 'downloading' | 'done' | 'error'
+  phase: 'assembling' | 'downloading' | 'done' | 'error' | 'canceled'
   done: number // 완료 세그먼트 수
   total: number // 전체 세그먼트 수
   bytes: number // 수신 바이트 누계

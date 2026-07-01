@@ -46,6 +46,8 @@ npm run watch          # 개발 중 자동 재빌드
 4. Popup에서 **ELIGIBLE 항목만 저장** 버튼 노출. 나머지는 사유와 함께 표시.
 5. 저장 시작 시 offscreen 재조합 진행률이 background를 거쳐 popup에 **실시간 진행바**로 표시된다
    (재조합 세그먼트 %/바이트 → 저장 중 → 완료/실패).
+6. 진행 중 작업은 **취소** 가능: 재조합 중이면 offscreen의 `AbortController`로 중단(OPFS 임시파일 삭제),
+   저장 중이면 `chrome.downloads.cancel` → 작업 상태 `canceled`.
 
 ## 스캐폴드 TODO (프로덕션화 시)
 

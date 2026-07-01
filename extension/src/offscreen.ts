@@ -6,7 +6,11 @@ import { assemble, assembleToWriter, type AssemblePlan } from './core/remux'
 type Msg =
   | { target: 'offscreen'; kind: 'parse-dash'; xml: string; base: string }
   | { target: 'offscreen'; kind: 'assemble'; plan: AssemblePlan; jobId?: string }
+  | { target: 'offscreen'; kind: 'cancel'; jobId: string }
   | { target: 'offscreen'; kind: 'revoke'; blobUrl: string }
+
+// jobId → 재조합 중단용 AbortController
+const controllers = new Map<string, AbortController>()
 
 // blobUrl → OPFS 파일명(다운로드 완료 후 revoke + 파일 삭제로 정리)
 const alive = new Map<string, string | null>()
@@ -26,12 +30,13 @@ function emitProgress(jobId: string | undefined, done: number, total: number, by
 // OPFS로 스트리밍 재조합(상수 메모리). 미지원 시 Blob 조립으로 폴백.
 async function assembleStreaming(
   plan: AssemblePlan,
-  jobId?: string,
+  jobId: string | undefined,
+  signal: AbortSignal,
 ): Promise<{ blobUrl: string; size: number }> {
   const onProgress = (done: number, total: number, bytes: number) => emitProgress(jobId, done, total, bytes)
   const getDir = navigator.storage?.getDirectory?.bind(navigator.storage)
   if (!getDir) {
-    const blob = await assemble(plan, { onProgress }) // 폴백: 메모리 Blob
+    const blob = await assemble(plan, { onProgress, signal }) // 폴백: 메모리 Blob
     const url = URL.createObjectURL(blob)
     alive.set(url, null)
     return { blobUrl: url, size: blob.size }
@@ -42,7 +47,7 @@ async function assembleStreaming(
   const writable = await handle.createWritable()
   const writer = writable.getWriter()
   try {
-    await assembleToWriter(plan, (chunk) => writer.write(chunk as unknown as BufferSource), { onProgress })
+    await assembleToWriter(plan, (chunk) => writer.write(chunk as unknown as BufferSource), { onProgress, signal })
     await writer.close()
   } catch (e) {
     try {
@@ -83,9 +88,20 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
   }
 
   if (msg.kind === 'assemble') {
-    assembleStreaming(msg.plan, msg.jobId)
+    const ac = new AbortController()
+    if (msg.jobId) controllers.set(msg.jobId, ac)
+    assembleStreaming(msg.plan, msg.jobId, ac.signal)
       .then(({ blobUrl, size }) => reply({ ok: true, blobUrl, size }))
-      .catch((e) => reply({ ok: false, error: (e as Error).message }))
+      .catch((e) => reply({ ok: false, error: (e as Error).message, aborted: (e as Error).name === 'AbortError' }))
+      .finally(() => {
+        if (msg.jobId) controllers.delete(msg.jobId)
+      })
+    return true
+  }
+
+  if (msg.kind === 'cancel') {
+    controllers.get(msg.jobId)?.abort()
+    reply({ ok: true })
     return true
   }
 
