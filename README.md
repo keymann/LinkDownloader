@@ -46,20 +46,37 @@ npx wrangler pages dev dist --port 8788 --kv LINKDL_KV
 
 ## Cloudflare Pages 배포
 
-1. 프로덕션 KV 네임스페이스 생성:
-   ```bash
-   npx wrangler kv namespace create LINKDL_KV
-   ```
-   출력된 `id` 를 `wrangler.toml` 의 `kv_namespaces` 항목에 채운다.
+> ⚠️ **이 프로젝트는 Cloudflare _Pages_ 프로젝트입니다 (Workers 아님).**
+> 배포는 반드시 `wrangler pages deploy` 를 사용하세요. `wrangler deploy`(Workers 전용)를 쓰면
+> `It looks like you've run a Workers-specific command in a Pages project` 오류가 납니다.
 
-2. 배포:
-   ```bash
-   npm run deploy        # = build 후 wrangler pages deploy dist
-   ```
-   또는 Cloudflare 대시보드에서 Git 연동 시 — Build command: `npm run build`, Output: `dist`,
-   그리고 Settings → Functions → KV bindings 에 `LINKDL_KV` 를 연결한다.
+### 1) 프로덕션 KV 네임스페이스 생성
+```bash
+npx wrangler kv namespace create LINKDL_KV
+```
+출력된 `id` 를 `wrangler.toml` 의 `kv_namespaces` 항목에 채웁니다. **(미교체 시 배포/런타임 바인딩 실패)**
 
-3. 최초 로그인(`keymann` / `dlsghcjsxh82`) 시 KV 에 계정이 부트스트랩된다. 이후 설정에서 비밀번호 변경 권장.
+### 2) CLI 로 직접 배포
+```bash
+npm run deploy        # = npm run build && wrangler pages deploy
+```
+
+### 3) Git 연동(자동 빌드) 시 대시보드 설정 — ⭐ 중요
+Cloudflare 대시보드 → 프로젝트 → Settings → **Build configuration** 에서:
+
+| 항목 | 값 |
+|---|---|
+| **Build command** | `npm run build` |
+| **Deploy command** | `npx wrangler pages deploy` |
+| Build output directory (해당 필드가 있으면) | `dist` |
+
+- **Deploy command 를 `npx wrangler deploy` 로 두면 실패**합니다 → `npx wrangler pages deploy` 로 변경.
+- Build command 가 비어 있으면 `dist` 가 생성되지 않아 빈 배포가 됩니다 → 반드시 `npm run build` 지정.
+- KV 바인딩은 `wrangler.toml` 의 `[[kv_namespaces]]`(id 교체 필수) 로 연결되며, 대시보드
+  Settings → **Bindings** 에서 `LINKDL_KV` 를 직접 연결해도 됩니다.
+
+### 4) 최초 로그인
+`keymann` / `dlsghcjsxh82` 로그인 시 KV 에 계정이 부트스트랩됩니다. 이후 설정에서 비밀번호 변경을 권장합니다.
 
 ## 구조
 
