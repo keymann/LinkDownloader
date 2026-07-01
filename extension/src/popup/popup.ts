@@ -12,6 +12,7 @@ const PHASE_LABEL: Record<DownloadJob['phase'], string> = {
   downloading: '저장 중',
   done: '완료',
   error: '실패',
+  canceled: '취소됨',
 }
 
 let tabId = -1
@@ -46,11 +47,15 @@ function renderJobs(): string {
           : j.phase === 'error'
             ? esc(j.error || '오류')
             : PHASE_LABEL[j.phase]
-      return `<div class="item"><div class="meta" style="width:100%">
-        <div class="title">${esc(j.title)} <small>[${PHASE_LABEL[j.phase]}]</small></div>
-        <div class="bar"><div class="fill${pct == null && j.phase !== 'done' ? ' indet' : ''}" style="width:${pct ?? 100}%"></div></div>
-        <div class="sub">${sub}</div>
-      </div></div>`
+      const active = j.phase === 'assembling' || j.phase === 'downloading'
+      return `<div class="item">
+        <div class="meta" style="flex:1;min-width:0">
+          <div class="title">${esc(j.title)} <small>[${PHASE_LABEL[j.phase]}]</small></div>
+          <div class="bar"><div class="fill${pct == null && j.phase !== 'done' ? ' indet' : ''}" style="width:${pct ?? 100}%"></div></div>
+          <div class="sub">${sub}</div>
+        </div>
+        ${active ? `<button class="ghost" data-cancel="${esc(j.id)}">취소</button>` : ''}
+      </div>`
     })
     .join('')}</div>`
 }
@@ -87,6 +92,11 @@ function render(): void {
   root.querySelectorAll('button[data-id]').forEach((b) =>
     b.addEventListener('click', () =>
       chrome.runtime.sendMessage({ rpc: 'download', tabId, candidateId: (b as HTMLElement).dataset.id }),
+    ),
+  )
+  root.querySelectorAll('button[data-cancel]').forEach((b) =>
+    b.addEventListener('click', () =>
+      chrome.runtime.sendMessage({ rpc: 'cancel', tabId, jobId: (b as HTMLElement).dataset.cancel }),
     ),
   )
 }
