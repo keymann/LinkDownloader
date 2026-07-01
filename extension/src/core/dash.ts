@@ -45,6 +45,16 @@ export function parseDash(xml: string, baseUrl: string): ManifestModel {
     variants: [],
     warnings: [],
   }
+  // fail-closed: 문서 어느 레벨이든 ContentProtection이 하나라도 있으면 암호화로 간주(09 §3).
+  const allCP = Array.from(doc.querySelectorAll('ContentProtection'))
+  if (allCP.length) {
+    m.hasEncryption = true
+    m.encryptionInfo = {
+      source: 'dash-contentprotection',
+      systemIds: allCP.map((c) => c.getAttribute('schemeIdUri') || '').filter(Boolean),
+    }
+  }
+
   const mpdBase = resolve(mpd.querySelector(':scope > BaseURL')?.textContent ?? '', baseUrl)
 
   for (const period of Array.from(mpd.querySelectorAll(':scope > Period'))) {

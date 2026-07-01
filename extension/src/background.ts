@@ -56,20 +56,23 @@ chrome.runtime.onMessage.addListener((msg: HookMessage & { data: unknown }, send
   return true
 })
 
-// popup ↔ background RPC
+// popup ↔ background RPC (처리하는 메시지에만 채널을 열어둔다)
 chrome.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candidateId?: string }, _s, reply) => {
-  if (msg.rpc === 'list') {
+  if (msg?.rpc === 'list') {
     const list = [...(byTab.get(msg.tabId!)?.values() ?? [])].map((c) => ({
       candidate: c,
       eligibility: evaluate(c, policyOf),
     }))
     reply(list)
-  } else if (msg.rpc === 'download') {
+    return true
+  }
+  if (msg?.rpc === 'download') {
     const c = byTab.get(msg.tabId!)?.get(msg.candidateId!)
     if (c) void startDownload(c)
     reply({ ok: !!c })
+    return true
   }
-  return true
+  return false
 })
 
 async function startDownload(c: MediaCandidate): Promise<void> {
@@ -116,10 +119,46 @@ function markSignal(tabId: number, signals: MediaCandidate['signals']): void {
   for (const c of map.values()) upsert(tabId, { ...c, signals: { ...c.signals, ...signals } })
 }
 
-// DASH는 DOMParser 필요 → offscreen document(chrome.offscreen)로 위임하는 스텁.
-async function parseDashViaOffscreen(_xml: string, _base: string): Promise<ManifestModel> {
-  // TODO: chrome.offscreen.createDocument({reasons:['DOM_PARSER']}) 후 core/dash.parseDash 실행.
-  throw new Error('DASH 파싱은 offscreen document에서 수행(스캐폴드 TODO). docs/research/10 §6 참조.')
+// --- DASH offscreen 파싱 (MV3 SW엔 DOMParser 없음 → offscreen document에 위임) ---
+const OFFSCREEN_URL = 'offscreen.html'
+let creatingOffscreen: Promise<void> | null = null
+
+async function hasOffscreen(): Promise<boolean> {
+  // Chrome 116+ : 존재하는 offscreen 컨텍스트 조회
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT' as chrome.runtime.ContextType],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_URL)],
+  })
+  return contexts.length > 0
+}
+
+async function ensureOffscreen(): Promise<void> {
+  if (await hasOffscreen()) return
+  // 동시 생성 경쟁 방지(한 번에 하나의 offscreen 문서만 허용됨)
+  if (!creatingOffscreen) {
+    creatingOffscreen = chrome.offscreen
+      .createDocument({
+        url: OFFSCREEN_URL,
+        reasons: ['DOM_PARSER' as chrome.offscreen.Reason],
+        justification: 'DASH MPD(XML) 파싱을 위해 DOMParser 사용 (미디어 적격성 판정)',
+      })
+      .finally(() => {
+        creatingOffscreen = null
+      })
+  }
+  await creatingOffscreen
+}
+
+async function parseDashViaOffscreen(xml: string, base: string): Promise<ManifestModel> {
+  await ensureOffscreen()
+  const res = (await chrome.runtime.sendMessage({
+    target: 'offscreen',
+    kind: 'parse-dash',
+    xml,
+    base,
+  })) as { ok: boolean; model?: ManifestModel; error?: string } | undefined
+  if (!res?.ok || !res.model) throw new Error(res?.error || 'offscreen DASH 파싱 실패')
+  return res.model
 }
 
 // --- helpers ---

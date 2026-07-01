@@ -3,7 +3,7 @@
   "name": "Media Eligibility Inspector",
   "version": "0.1.0",
   "description": "웹페이지 미디어를 탐지하고 다운로드 적격성(비DRM·비암호화)을 판정한다. DRM/암호화/ToS 우회 없음.",
-  "permissions": ["downloads", "storage", "scripting", "activeTab", "webRequest", "notifications"],
+  "permissions": ["downloads", "storage", "scripting", "activeTab", "webRequest", "notifications", "offscreen"],
   "optional_host_permissions": ["*://*/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": { "default_popup": "popup/popup.html", "default_title": "Media Eligibility Inspector" },

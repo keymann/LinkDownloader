@@ -18,6 +18,7 @@ const ctx = await esbuild.context({
     background: 'src/background.ts',
     'content-iso': 'src/content-iso.ts',
     'hook-main': 'src/hook-main.ts',
+    offscreen: 'src/offscreen.ts',
     'popup/popup': 'src/popup/popup.ts',
   },
   outdir,
@@ -25,6 +26,7 @@ const ctx = await esbuild.context({
 
 async function copyStatic() {
   await cp('manifest.json', `${outdir}/manifest.json`)
+  await cp('src/offscreen.html', `${outdir}/offscreen.html`)
   await cp('src/popup/popup.html', `${outdir}/popup/popup.html`)
   await cp('icons', `${outdir}/icons`, { recursive: true }).catch(() => {})
 }
