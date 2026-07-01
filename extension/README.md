@@ -101,6 +101,8 @@ npm run start:chromium # web-ext run (Chromium에 로드하여 실행)
       있고 코덱이 안 맞으면 blob을 유지(오결합 방지)하며 "코덱 불일치"로 표시.
 - [ ] 아이콘·개인정보 처리방침·스토어 심사 자료
 - [x] Firefox 호환(`env.api`=browser??chrome, dom-tasks 라우팅, manifest gecko) — 위 "크로스브라우저" 참조
+- [x] 취소 정리 — 저장 중 취소 시 중단된 다운로드 항목을 `downloads.erase`로 정리(부분 파일/기록 제거),
+      완료/취소/실패 작업은 팝업 "지우기"(`clear-job`)로 목록에서 제거. (재조합 중 취소는 OPFS 임시파일 자동 삭제)
 - [ ] Safari(Web Extension) 대응 및 실제 Firefox 로드 검증(`web-ext`)
 
 ## 준법 체크리스트(코드리뷰 필수)

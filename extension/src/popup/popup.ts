@@ -73,6 +73,11 @@ function jobNode(j: DownloadJob): HTMLElement {
     const btn = el('button', { class: 'ghost', text: '취소' })
     btn.onclick = () => void api.runtime.sendMessage({ rpc: 'cancel', tabId, jobId: j.id })
     item.append(btn)
+  } else {
+    // 완료/취소/실패 → 목록에서 지우기
+    const btn = el('button', { class: 'ghost', text: '지우기' })
+    btn.onclick = () => void api.runtime.sendMessage({ rpc: 'clear-job', tabId, jobId: j.id })
+    item.append(btn)
   }
   return item
 }
@@ -137,9 +142,12 @@ async function main(): Promise<void> {
   for (const j of jobsRes ?? []) jobs.set(j.id, j)
   render()
 
-  api.runtime.onMessage.addListener((msg: { type?: string; job?: DownloadJob }) => {
+  api.runtime.onMessage.addListener((msg: { type?: string; job?: DownloadJob; jobId?: string; tabId?: number }) => {
     if (msg?.type === 'job-update' && msg.job && msg.job.tabId === tabId) {
       jobs.set(msg.job.id, msg.job)
+      render()
+    } else if (msg?.type === 'job-cleared' && msg.tabId === tabId && msg.jobId) {
+      jobs.delete(msg.jobId)
       render()
     }
   })
