@@ -53,13 +53,23 @@ npm install
 npm run build          # → extension/dist/
 # Chrome: chrome://extensions → 개발자 모드 → "압축해제된 확장 프로그램을 로드" → extension/dist 선택
 npm run watch          # 개발 중 자동 재빌드
+
+npm run lint           # web-ext lint (매니페스트/번들 정적 검증)
+npm run start:firefox  # web-ext run (Firefox에 로드하여 실행)
+npm run start:chromium # web-ext run (Chromium에 로드하여 실행)
 ```
+
+### 린트 결과(참고)
+`npm run lint`는 **0 errors**. 남는 2개 warning은 **단일 매니페스트로 Chrome+Firefox 동시 지원**에서 오는
+의도된 트레이드오프다(무해, Firefox가 무시):
+- `MANIFEST_PERMISSIONS`: `offscreen`은 Chrome 전용 권한(Firefox는 로컬 DOM 사용 → 불필요)
+- `MANIFEST_FIELD_UNSUPPORTED`: `background.service_worker`(Chrome)는 Firefox가 무시하고 `background.scripts` 사용
 
 ## 동작 개요
 
 1. `content-iso.ts`가 DOM을 스캔/관찰하고, `hook-main.ts`가 MSE/Blob/fetch/EME를 후킹해 신호를 background로 보낸다.
 2. `background.ts`가 `webRequest`로 미디어 요청을 관찰하고, 매니페스트(.m3u8/.mpd)를 파싱한다.
-   - HLS는 SW에서 직접 파싱, **DASH는 DOMParser가 필요**하여 offscreen document 위임(스텁 TODO).
+   - HLS는 어디서나 파싱, **DASH는 DOMParser 필요** → `dom-tasks`가 Chrome=offscreen / Firefox=로컬로 라우팅.
 3. `eligibility.ts`가 DRM/암호화/robots/ToS/CORS/LIVE를 게이트해 판정한다.
 4. Popup에서 **ELIGIBLE 항목만 저장** 버튼 노출. 나머지는 사유와 함께 표시.
 5. 저장 시작 시 offscreen 재조합 진행률이 background를 거쳐 popup에 **실시간 진행바**로 표시된다

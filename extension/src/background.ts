@@ -156,8 +156,11 @@ api.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candidat
   return false
 })
 
+// 아이콘 애셋 없이 동작하도록 1x1 투명 PNG data URI 사용(아이콘은 범위 외).
+const NOTIFY_ICON =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 function notify(title: string, message: string): void {
-  void api.notifications?.create({ type: 'basic', iconUrl: 'icons/128.png', title, message })
+  void api.notifications?.create({ type: 'basic', iconUrl: NOTIFY_ICON, title, message })
 }
 
 // --- 진행 중 다운로드 작업(진행률 UI) ---
