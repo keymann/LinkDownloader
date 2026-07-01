@@ -7,7 +7,7 @@ import { createPolicyLookup, type HostPolicyTable } from './core/policy'
 import { parseRobots, type RobotsRules } from './core/robots'
 import { correlate, type MseContext } from './core/correlate'
 import type { AssemblePlan } from './core/remux'
-import type { HookMessage, MediaCandidate, ManifestModel } from './core/types'
+import type { DownloadJob, HookMessage, MediaCandidate, ManifestModel } from './core/types'
 
 // 탭별 후보 저장(휘발). MV3 SW 종료 대비 storage.session 백업.
 const byTab = new Map<number, Map<string, MediaCandidate>>()
@@ -27,7 +27,8 @@ function mseOf(tabId: number): MseContext {
 chrome.tabs?.onRemoved.addListener((tabId) => {
   byTab.delete(tabId)
   mseByTab.delete(tabId)
-  void chrome.storage.session.remove(`tab:${tabId}`)
+  for (const [id, j] of jobs) if (j.tabId === tabId) jobs.delete(id)
+  void chrome.storage.session.remove([`tab:${tabId}`, `jobs:${tabId}`])
 })
 
 // --- 준법 정책 레이어 (ToS 테이블 + robots.txt 캐시) ---
@@ -143,8 +144,12 @@ chrome.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candi
   }
   if (msg?.rpc === 'download') {
     const c = byTab.get(msg.tabId!)?.get(msg.candidateId!)
-    if (c) void startDownload(c)
+    if (c) void startDownload(c, msg.tabId!)
     reply({ ok: !!c })
+    return true
+  }
+  if (msg?.rpc === 'jobs') {
+    reply([...jobs.values()].filter((j) => j.tabId === msg.tabId))
     return true
   }
   return false
@@ -154,8 +159,28 @@ function notify(title: string, message: string): void {
   void chrome.notifications?.create({ type: 'basic', iconUrl: 'icons/128.png', title, message })
 }
 
-// 완료 시 offscreen blob URL을 해제하기 위한 매핑
-const pendingBlob = new Map<number, string>()
+// --- 진행 중 다운로드 작업(진행률 UI) ---
+const jobs = new Map<string, DownloadJob>()
+function setJob(job: DownloadJob): void {
+  jobs.set(job.id, job)
+  void chrome.runtime.sendMessage({ type: 'job-update', job }).catch(() => {}) // popup 실시간 갱신
+  void chrome.storage.session.set({ [`jobs:${job.tabId}`]: [...jobs.values()].filter((j) => j.tabId === job.tabId) })
+}
+function patchJob(id: string, patch: Partial<DownloadJob>): void {
+  const j = jobs.get(id)
+  if (j) setJob(Object.assign(j, patch))
+}
+
+// offscreen 재조합 진행률 수신 → 작업 갱신
+chrome.runtime.onMessage.addListener((msg: { type?: string; jobId?: string; done?: number; total?: number; bytes?: number }) => {
+  if (msg?.type === 'dl-progress' && msg.jobId) {
+    patchJob(msg.jobId, { phase: 'assembling', done: msg.done ?? 0, total: msg.total ?? 0, bytes: msg.bytes ?? 0 })
+  }
+})
+
+// 완료 시 offscreen blob URL 해제 + 작업 상태 종료
+const pendingBlob = new Map<number, string>() // downloadId → blobUrl
+const downloadJob = new Map<number, string>() // downloadId → jobId
 chrome.downloads?.onChanged.addListener((delta) => {
   const s = delta.state?.current
   if (s !== 'complete' && s !== 'interrupted') return
@@ -163,6 +188,11 @@ chrome.downloads?.onChanged.addListener((delta) => {
   if (url) {
     void chrome.runtime.sendMessage({ target: 'offscreen', kind: 'revoke', blobUrl: url })
     pendingBlob.delete(delta.id)
+  }
+  const jid = downloadJob.get(delta.id)
+  if (jid) {
+    patchJob(jid, { phase: s === 'complete' ? 'done' : 'error', error: s === 'interrupted' ? '중단됨' : undefined })
+    downloadJob.delete(delta.id)
   }
 })
 
@@ -181,7 +211,7 @@ async function buildPlan(c: MediaCandidate): Promise<AssemblePlan> {
   throw new IneligibleError('NO_RESOLVABLE_SOURCE')
 }
 
-async function startDownload(c: MediaCandidate): Promise<void> {
+async function startDownload(c: MediaCandidate, tabId: number): Promise<void> {
   // 다운로드 시점엔 robots를 확실히 로드해 정책을 강제한다(list는 캐시 기반 근사)
   await ensureRobots(hostOf(c.url ?? c.pageUrl))
   const verdict = evaluate(c, policyOf)
@@ -189,24 +219,33 @@ async function startDownload(c: MediaCandidate): Promise<void> {
     notify('다운로드 불가', `${verdict.verdict}: ${verdict.reason}`)
     return
   }
+  const jobId = crypto.randomUUID()
+  const title = safeName(c)
+  const isFile = c.kind === 'file' && !!c.url
+  setJob({ id: jobId, tabId, candidateId: c.id, title, phase: isFile ? 'downloading' : 'assembling', done: 0, total: 0, bytes: 0 })
+
   // 단순 progressive 파일: URL 그대로 다운로드
-  if (c.kind === 'file' && c.url) {
-    await chrome.downloads.download({ url: c.url, filename: safeName(c) })
+  if (isFile) {
+    const id = await chrome.downloads.download({ url: c.url!, filename: title })
+    downloadJob.set(id, jobId)
     return
   }
-  // HLS/DASH: 계획 수립 → offscreen에서 재조합(Blob/URL) → background에서 다운로드
+  // HLS/DASH: 계획 수립 → offscreen에서 재조합(진행률 emit) → background에서 다운로드
   try {
     const plan = await buildPlan(c)
     await ensureOffscreen()
-    const res = (await chrome.runtime.sendMessage({ target: 'offscreen', kind: 'assemble', plan })) as
+    const res = (await chrome.runtime.sendMessage({ target: 'offscreen', kind: 'assemble', plan, jobId })) as
       | { ok: boolean; blobUrl?: string; error?: string }
       | undefined
     if (!res?.ok || !res.blobUrl) throw new Error(res?.error || '세그먼트 재조합 실패')
-    const id = await chrome.downloads.download({ url: res.blobUrl, filename: safeName(c) })
+    patchJob(jobId, { phase: 'downloading' })
+    const id = await chrome.downloads.download({ url: res.blobUrl, filename: title })
     pendingBlob.set(id, res.blobUrl)
+    downloadJob.set(id, jobId)
   } catch (e) {
-    if (e instanceof IneligibleError) notify('다운로드 불가', `INELIGIBLE: ${e.reason}`)
-    else notify('다운로드 오류', (e as Error).message)
+    const reason = e instanceof IneligibleError ? `INELIGIBLE: ${e.reason}` : (e as Error).message
+    patchJob(jobId, { phase: 'error', error: reason })
+    notify(e instanceof IneligibleError ? '다운로드 불가' : '다운로드 오류', reason)
   }
 }
 

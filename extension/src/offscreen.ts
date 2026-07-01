@@ -5,7 +5,7 @@ import { assemble, assembleToWriter, type AssemblePlan } from './core/remux'
 
 type Msg =
   | { target: 'offscreen'; kind: 'parse-dash'; xml: string; base: string }
-  | { target: 'offscreen'; kind: 'assemble'; plan: AssemblePlan }
+  | { target: 'offscreen'; kind: 'assemble'; plan: AssemblePlan; jobId?: string }
   | { target: 'offscreen'; kind: 'revoke'; blobUrl: string }
 
 // blobUrl → OPFS 파일명(다운로드 완료 후 revoke + 파일 삭제로 정리)
@@ -17,11 +17,21 @@ function uid(): string {
   return [...a].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+// 재조합 진행률을 broadcast(background/popup 구독). jobId로 작업 식별.
+function emitProgress(jobId: string | undefined, done: number, total: number, bytes: number): void {
+  if (!jobId) return
+  void chrome.runtime.sendMessage({ type: 'dl-progress', jobId, done, total, bytes })
+}
+
 // OPFS로 스트리밍 재조합(상수 메모리). 미지원 시 Blob 조립으로 폴백.
-async function assembleStreaming(plan: AssemblePlan): Promise<{ blobUrl: string; size: number }> {
+async function assembleStreaming(
+  plan: AssemblePlan,
+  jobId?: string,
+): Promise<{ blobUrl: string; size: number }> {
+  const onProgress = (done: number, total: number, bytes: number) => emitProgress(jobId, done, total, bytes)
   const getDir = navigator.storage?.getDirectory?.bind(navigator.storage)
   if (!getDir) {
-    const blob = await assemble(plan) // 폴백: 메모리 Blob
+    const blob = await assemble(plan, { onProgress }) // 폴백: 메모리 Blob
     const url = URL.createObjectURL(blob)
     alive.set(url, null)
     return { blobUrl: url, size: blob.size }
@@ -32,7 +42,7 @@ async function assembleStreaming(plan: AssemblePlan): Promise<{ blobUrl: string;
   const writable = await handle.createWritable()
   const writer = writable.getWriter()
   try {
-    await assembleToWriter(plan, (chunk) => writer.write(chunk as unknown as BufferSource))
+    await assembleToWriter(plan, (chunk) => writer.write(chunk as unknown as BufferSource), { onProgress })
     await writer.close()
   } catch (e) {
     try {
@@ -73,7 +83,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
   }
 
   if (msg.kind === 'assemble') {
-    assembleStreaming(msg.plan)
+    assembleStreaming(msg.plan, msg.jobId)
       .then(({ blobUrl, size }) => reply({ ok: true, blobUrl, size }))
       .catch((e) => reply({ ok: false, error: (e as Error).message }))
     return true

@@ -44,6 +44,8 @@ npm run watch          # 개발 중 자동 재빌드
    - HLS는 SW에서 직접 파싱, **DASH는 DOMParser가 필요**하여 offscreen document 위임(스텁 TODO).
 3. `eligibility.ts`가 DRM/암호화/robots/ToS/CORS/LIVE를 게이트해 판정한다.
 4. Popup에서 **ELIGIBLE 항목만 저장** 버튼 노출. 나머지는 사유와 함께 표시.
+5. 저장 시작 시 offscreen 재조합 진행률이 background를 거쳐 popup에 **실시간 진행바**로 표시된다
+   (재조합 세그먼트 %/바이트 → 저장 중 → 완료/실패).
 
 ## 스캐폴드 TODO (프로덕션화 시)
 
