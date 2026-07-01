@@ -2,6 +2,8 @@
 // 주의: MV3 SW에는 DOMParser가 없다 → DASH 파싱은 offscreen document에 위임(§ parseDashViaOffscreen).
 import { parseHls } from './core/hls'
 import { evaluate, type PolicyLookup } from './core/eligibility'
+import { IneligibleError, planFromManifest, resolveHlsManifest } from './core/plan'
+import type { AssemblePlan } from './core/remux'
 import type { HookMessage, MediaCandidate, ManifestModel } from './core/types'
 
 // 탭별 후보 저장(휘발). MV3 SW 종료 대비 storage.session 백업.
@@ -75,24 +77,62 @@ chrome.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candi
   return false
 })
 
+function notify(title: string, message: string): void {
+  void chrome.notifications?.create({ type: 'basic', iconUrl: 'icons/128.png', title, message })
+}
+
+// 완료 시 offscreen blob URL을 해제하기 위한 매핑
+const pendingBlob = new Map<number, string>()
+chrome.downloads?.onChanged.addListener((delta) => {
+  const s = delta.state?.current
+  if (s !== 'complete' && s !== 'interrupted') return
+  const url = pendingBlob.get(delta.id)
+  if (url) {
+    void chrome.runtime.sendMessage({ target: 'offscreen', kind: 'revoke', blobUrl: url })
+    pendingBlob.delete(delta.id)
+  }
+})
+
+// 후보 → AssemblePlan (HLS master→media 해석 / DASH offscreen 파싱)
+async function buildPlan(c: MediaCandidate): Promise<AssemblePlan> {
+  if (c.kind === 'hls') {
+    if (!c.url) throw new IneligibleError('NO_RESOLVABLE_SOURCE')
+    return planFromManifest(await resolveHlsManifest(c.url, fetch))
+  }
+  if (c.kind === 'dash') {
+    let m = c.manifest
+    if (!m && c.url) m = await parseDashViaOffscreen(await (await fetch(c.url)).text(), c.url)
+    if (!m) throw new IneligibleError('NO_RESOLVABLE_SOURCE')
+    return planFromManifest(m)
+  }
+  throw new IneligibleError('NO_RESOLVABLE_SOURCE')
+}
+
 async function startDownload(c: MediaCandidate): Promise<void> {
   const verdict = evaluate(c, policyOf)
   if (verdict.verdict !== 'ELIGIBLE') {
-    void chrome.notifications?.create({
-      type: 'basic',
-      iconUrl: 'icons/128.png',
-      title: '다운로드 불가',
-      message: `${verdict.verdict}: ${verdict.reason}`,
-    })
+    notify('다운로드 불가', `${verdict.verdict}: ${verdict.reason}`)
     return
   }
+  // 단순 progressive 파일: URL 그대로 다운로드
   if (c.kind === 'file' && c.url) {
     await chrome.downloads.download({ url: c.url, filename: safeName(c) })
     return
   }
-  // HLS/DASH(비암호화 확정): 세그먼트 재조합은 remux 코어 사용.
-  // 대용량/스트리밍은 offscreen document에서 처리 권장(§ docs 11 §5).
-  void chrome.runtime.sendMessage({ rpc: 'assemble-in-offscreen', candidate: c })
+  // HLS/DASH: 계획 수립 → offscreen에서 재조합(Blob/URL) → background에서 다운로드
+  try {
+    const plan = await buildPlan(c)
+    await ensureOffscreen()
+    const res = (await chrome.runtime.sendMessage({ target: 'offscreen', kind: 'assemble', plan })) as
+      | { ok: boolean; blobUrl?: string; error?: string }
+      | undefined
+    if (!res?.ok || !res.blobUrl) throw new Error(res?.error || '세그먼트 재조합 실패')
+    const id = await chrome.downloads.download({ url: res.blobUrl, filename: safeName(c) })
+    pendingBlob.set(id, res.blobUrl)
+  } catch (e) {
+    if (e instanceof IneligibleError) notify('다운로드 불가', `INELIGIBLE: ${e.reason}`)
+    else notify('다운로드 오류', (e as Error).message)
+  }
 }
 
 // --- 매니페스트 수집/파싱 ---
