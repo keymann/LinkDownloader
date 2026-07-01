@@ -1,5 +1,6 @@
 // ISOLATED world content script — docs/research/10 §5.
 // (1) MAIN world 후킹 메시지를 background로 릴레이 (2) DOM 스캔/관찰.
+import { api } from './env'
 import type { HookMessage, MediaCandidate } from './core/types'
 
 const KEY = '__mei'
@@ -9,7 +10,7 @@ window.addEventListener('message', (e: MessageEvent) => {
   if (e.source !== window) return
   const msg = e.data as HookMessage | undefined
   if (!msg || msg.__mei !== true) return
-  chrome.runtime.sendMessage(msg)
+  api.runtime.sendMessage(msg)
 })
 
 // --- (2) DOM 스캔 (docs/research/01 §1.3) ---
@@ -60,7 +61,7 @@ function scheduleScan(): void {
   clearTimeout(timer)
   timer = self.setTimeout(() => {
     const candidates = scan()
-    if (candidates.length) chrome.runtime.sendMessage({ [KEY]: true, type: 'dom-candidates', data: candidates })
+    if (candidates.length) api.runtime.sendMessage({ [KEY]: true, type: 'dom-candidates', data: candidates })
   }, 80)
 }
 
