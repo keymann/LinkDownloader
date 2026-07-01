@@ -54,6 +54,7 @@ npm run build          # → extension/dist/
 # Chrome: chrome://extensions → 개발자 모드 → "압축해제된 확장 프로그램을 로드" → extension/dist 선택
 npm run watch          # 개발 중 자동 재빌드
 
+npm test               # vitest — 코어 로직 단위 테스트 (9 suites / 50 tests)
 npm run lint           # web-ext lint (매니페스트/번들 정적 검증)
 npm run start:firefox  # web-ext run (Firefox에 로드하여 실행)
 npm run start:chromium # web-ext run (Chromium에 로드하여 실행)
@@ -104,6 +105,24 @@ npm run start:chromium # web-ext run (Chromium에 로드하여 실행)
 - [x] 취소 정리 — 저장 중 취소 시 중단된 다운로드 항목을 `downloads.erase`로 정리(부분 파일/기록 제거),
       완료/취소/실패 작업은 팝업 "지우기"(`clear-job`)로 목록에서 제거. (재조합 중 취소는 OPFS 임시파일 자동 삭제)
 - [ ] Safari(Web Extension) 대응 및 실제 Firefox 로드 검증(`web-ext`)
+
+## 테스트 (`npm test`, vitest)
+
+브라우저 API 비의존 **코어 로직**을 정식 단위 테스트로 커버(`extension/test/`):
+
+| 스위트 | 대상 |
+|---|---|
+| `codecs` | 코덱 패밀리/MIME 파싱/집합 매칭 |
+| `robots` | REP 파서·매처(최장/allow-tie/`*`/`$`) |
+| `eligibility` | 판정 Decision Tree(DRM/암호화/robots/ToS/CORS/LIVE/무소스/OK) |
+| `hls` | media/master 파싱, EXT-X-MAP/KEY/BYTERANGE/ENDLIST |
+| `dash` | (jsdom) SegmentTemplate/Timeline·`%0Nd`·ContentProtection·static/dynamic |
+| `plan` | AssemblePlan 생성(fmp4/ts/분리트랙), 암호화·LIVE 차단, HLS master→media |
+| `remux` | planToSegments·assembleToWriter(순서/abort)·assemble(Blob) |
+| `correlate` | MSE↔코덱 매칭(대표/폴백/모호/불일치) |
+| `policy` | robots+ToS 테이블 ↔ eligibility 통합 |
+
+DASH만 `jsdom` 환경(`// @vitest-environment jsdom`), 나머지는 node. 네트워크는 `fetchImpl` 주입으로 목킹.
 
 ## 준법 체크리스트(코드리뷰 필수)
 
