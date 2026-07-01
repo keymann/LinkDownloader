@@ -153,8 +153,23 @@ api.runtime.onMessage.addListener((msg: { rpc?: string; tabId?: number; candidat
     reply({ ok: true })
     return true
   }
+  if (msg?.rpc === 'clear-job' && msg.jobId) {
+    clearJob(msg.jobId)
+    reply({ ok: true })
+    return true
+  }
   return false
 })
+
+// 완료/취소/실패 작업을 목록에서 제거(진행 중이면 무시)
+function clearJob(jobId: string): void {
+  const j = jobs.get(jobId)
+  if (!j || j.phase === 'assembling' || j.phase === 'downloading') return
+  const tabId = j.tabId
+  jobs.delete(jobId)
+  void api.storage.session.set({ [`jobs:${tabId}`]: [...jobs.values()].filter((x) => x.tabId === tabId) })
+  void api.runtime.sendMessage({ type: 'job-cleared', jobId, tabId }).catch(() => {})
+}
 
 // 아이콘 애셋 없이 동작하도록 1x1 투명 PNG data URI 사용(아이콘은 범위 외).
 const NOTIFY_ICON =
@@ -197,8 +212,11 @@ api.downloads?.onChanged.addListener((delta) => {
   }
   const jid = downloadJob.get(delta.id)
   if (jid) {
-    const phase = canceledJobs.has(jid) ? 'canceled' : s === 'complete' ? 'done' : 'error'
+    const canceled = canceledJobs.has(jid)
+    const phase = canceled ? 'canceled' : s === 'complete' ? 'done' : 'error'
     patchJob(jid, { phase, error: phase === 'error' ? '중단됨' : undefined })
+    // 취소로 중단된 다운로드는 남은 항목(부분 파일/기록)을 정리한다.
+    if (canceled && s === 'interrupted') void api.downloads.erase({ id: delta.id }).catch(() => {})
     downloadJob.delete(delta.id)
     jobDownloadId.delete(jid)
     canceledJobs.delete(jid)
