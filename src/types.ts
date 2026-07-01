@@ -6,6 +6,8 @@ export interface VideoSource {
   label: string
   size: number | null
   contentType: string | null
+  // 개별 후보 미리보기(<video poster> 등). 없으면 페이지 썸네일로 대체.
+  poster?: string | null
 }
 
 export interface ExtractResult {
