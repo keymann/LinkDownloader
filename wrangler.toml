@@ -11,4 +11,5 @@ pages_build_output_dir = "dist"
 # 프로덕션 배포 전 `wrangler kv namespace create LINKDL_KV`로 생성 후 아래 id를 채운다.
 [[kv_namespaces]]
 binding = "LINKDL_KV"
-id = "7646327020a142b68c982ea3cfda9f3d"
+id = "7646327020a142b68c982ea3cfda9f3d"          # 프로덕션
+preview_id = "83c9668bfe47445cbc4f893f424dec88"  # 프리뷰(브랜치/PR 배포)
