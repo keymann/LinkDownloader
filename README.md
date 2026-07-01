@@ -1,5 +1,7 @@
 # Link Downloader
 
+[![CI](https://github.com/keymann/LinkDownloader/actions/workflows/ci.yml/badge.svg)](https://github.com/keymann/LinkDownloader/actions/workflows/ci.yml)
+
 Cloudflare Workers(static assets) 위에서 동작하는 동영상 다운로드 웹 클라이언트.
 임의 URL 웹페이지에서 동영상 소스를 찾아 기기로 다운로드한다.
 
