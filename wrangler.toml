@@ -1,8 +1,15 @@
 # 이 프로젝트는 Cloudflare **Pages** 프로젝트다 (Workers 아님).
-# 따라서 배포는 반드시 `wrangler pages deploy` 를 사용한다. `wrangler deploy`(Workers 전용)는 오류가 난다.
-# Cloudflare 대시보드 빌드 설정:
-#   - Build command : npm run build
-#   - Deploy command: npx wrangler pages deploy   (또는 비워두고 Build output = dist)
+#
+# 권장 배포: Cloudflare 대시보드에서 Git 저장소를 연결한 "네이티브 Pages 자동 배포".
+#   - Build command          : npm run build
+#   - Build output directory  : dist   (아래 pages_build_output_dir 와 동일)
+#   - Deploy command          : (설정하지 않음 — 비워둠)
+#   - CLOUDFLARE_API_TOKEN    : (환경변수 불필요 — 제거)
+#   → Cloudflare 가 빌드 산출물(dist)과 functions/ 를 자체 자격증명으로 자동 배포하므로
+#     커스텀 토큰/배포 명령이 필요 없다. (커스텀 토큰 사용 시 Pages:Edit 권한 부족으로
+#     "Authentication error [code: 10000]" 발생)
+#
+# 수동 CLI 배포가 필요하면(로컬에서 `wrangler login` 후): npm run deploy
 name = "link-downloader"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "dist"

@@ -46,34 +46,43 @@ npx wrangler pages dev dist --port 8788 --kv LINKDL_KV
 
 ## Cloudflare Pages 배포
 
-> ⚠️ **이 프로젝트는 Cloudflare _Pages_ 프로젝트입니다 (Workers 아님).**
-> 배포는 반드시 `wrangler pages deploy` 를 사용하세요. `wrangler deploy`(Workers 전용)를 쓰면
-> `It looks like you've run a Workers-specific command in a Pages project` 오류가 납니다.
+> ✅ **권장: 네이티브 Pages Git 자동 배포** — 커스텀 배포 명령/`CLOUDFLARE_API_TOKEN` 없이
+> Cloudflare 가 빌드 산출물과 `functions/` 를 자체 자격증명으로 자동 배포합니다. 배포 관련 오류
+> (Workers 명령 오류, `Authentication error [code: 10000]`)가 근본적으로 발생하지 않습니다.
 
-### 1) 프로덕션 KV 네임스페이스 생성
+### 1) 프로덕션 KV 네임스페이스 생성 (최초 1회)
 ```bash
 npx wrangler kv namespace create LINKDL_KV
+npx wrangler kv namespace create LINKDL_KV --preview
 ```
-출력된 `id` 를 `wrangler.toml` 의 `kv_namespaces` 항목에 채웁니다. **(미교체 시 배포/런타임 바인딩 실패)**
+출력된 `id` / `preview_id` 를 `wrangler.toml` 의 `[[kv_namespaces]]` 에 채웁니다. (본 저장소는 반영 완료)
 
-### 2) CLI 로 직접 배포
-```bash
-npm run deploy        # = npm run build && wrangler pages deploy
-```
-
-### 3) Git 연동(자동 빌드) 시 대시보드 설정 — ⭐ 중요
-Cloudflare 대시보드 → 프로젝트 → Settings → **Build configuration** 에서:
+### 2) 대시보드에서 Git 저장소 연결 (네이티브 Pages)
+Cloudflare 대시보드 → **Workers & Pages → Create → Pages → Connect to Git** 로 저장소를 연결하고
+Build configuration 을 다음과 같이 설정합니다:
 
 | 항목 | 값 |
 |---|---|
+| Framework preset | `Vite` (또는 None) |
 | **Build command** | `npm run build` |
-| **Deploy command** | `npx wrangler pages deploy` |
-| Build output directory (해당 필드가 있으면) | `dist` |
+| **Build output directory** | `dist` |
+| **Deploy command** | **(설정하지 않음 — 비워둠)** |
+| 환경변수 `CLOUDFLARE_API_TOKEN` | **(불필요 — 있으면 제거)** |
 
-- **Deploy command 를 `npx wrangler deploy` 로 두면 실패**합니다 → `npx wrangler pages deploy` 로 변경.
-- Build command 가 비어 있으면 `dist` 가 생성되지 않아 빈 배포가 됩니다 → 반드시 `npm run build` 지정.
-- KV 바인딩은 `wrangler.toml` 의 `[[kv_namespaces]]`(id 교체 필수) 로 연결되며, 대시보드
-  Settings → **Bindings** 에서 `LINKDL_KV` 를 직접 연결해도 됩니다.
+- ⚠️ **Deploy command 를 넣지 마세요.** 커스텀 배포 명령(`wrangler deploy` / `wrangler pages deploy`)은
+  커스텀 API 토큰을 요구하며, 토큰에 `Pages: Edit` 권한이 없으면 `Authentication error [code: 10000]`
+  이 발생합니다. 네이티브 자동 배포는 토큰이 필요 없습니다.
+- KV 바인딩은 `wrangler.toml` 의 `[[kv_namespaces]]` 로 자동 적용됩니다. (원하면 대시보드
+  Settings → **Bindings** 에서 `LINKDL_KV` 를 직접 연결해도 됩니다.)
+
+### 3) (대안) 로컬에서 수동 CLI 배포
+CI 없이 로컬에서 배포하려면 `wrangler login`(OAuth) 후:
+```bash
+npm run deploy        # = npm run build && wrangler pages deploy
+```
+> CI 환경에서 `wrangler pages deploy` 를 쓰려면 `CLOUDFLARE_API_TOKEN` 에 **Account → Cloudflare Pages: Edit**
+> (+ Workers KV Storage: Edit, Account Settings: Read, User Details: Read) 권한이 있어야 합니다.
+> 커스텀 토큰은 사용자의 "Super Administrator" 역할과 무관하게 **명시된 스코프만** 가집니다.
 
 ### 4) 최초 로그인
 `keymann` / `dlsghcjsxh82` 로그인 시 KV 에 계정이 부트스트랩됩니다. 이후 설정에서 비밀번호 변경을 권장합니다.
