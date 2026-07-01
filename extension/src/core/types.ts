@@ -77,6 +77,19 @@ export interface EligibilityResult {
   reason: string
 }
 
+// 진행 중 다운로드 작업(진행률 UI용). background가 소유, popup이 구독.
+export interface DownloadJob {
+  id: string
+  tabId: number
+  candidateId: string
+  title: string
+  phase: 'assembling' | 'downloading' | 'done' | 'error'
+  done: number // 완료 세그먼트 수
+  total: number // 전체 세그먼트 수
+  bytes: number // 수신 바이트 누계
+  error?: string
+}
+
 // content(MAIN)→background 메시지
 export interface HookMessage {
   __mei: true
