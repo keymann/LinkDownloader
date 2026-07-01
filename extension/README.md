@@ -96,6 +96,9 @@ npm run start:chromium # web-ext run (Chromium에 로드하여 실행)
       — `core/correlate`가 같은 탭의 MSE(blob) 재생을 실제 매니페스트와 연결(중복 blob 제거,
       매니페스트를 대표로 표기). 매니페스트 없이 세그먼트만 관측되면 사유(재조합 불가)와 함께 CONDITIONAL.
       background가 object-url/mse-sourcebuffer/mse-append/media-fetch를 탭별 컨텍스트로 수집.
+- [x] 정밀 MIME/코덱 매칭(상관 과결합 방지) — `core/codecs`가 MSE appendBuffer mime의 코덱을
+      매니페스트 variant 코덱과 대조. 코덱 일치 매니페스트만 대표로 blob 중복 제거하고, 여러 매니페스트가
+      있고 코덱이 안 맞으면 blob을 유지(오결합 방지)하며 "코덱 불일치"로 표시.
 - [ ] 아이콘·개인정보 처리방침·스토어 심사 자료
 - [x] Firefox 호환(`env.api`=browser??chrome, dom-tasks 라우팅, manifest gecko) — 위 "크로스브라우저" 참조
 - [ ] Safari(Web Extension) 대응 및 실제 Firefox 로드 검증(`web-ext`)
