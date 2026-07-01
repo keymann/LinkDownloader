@@ -30,6 +30,9 @@
 |---|---|---|
 | 9 | [09-parser-spec.md](./09-parser-spec.md) | Playlist Parser 상세 스펙 (HLS/DASH 렉싱·문법·데이터 모델·SegmentTemplate/Timeline 확장·암호화 신호 추출·엣지케이스·테스트 벡터) |
 | 10 | [10-extension-design.md](./10-extension-design.md) | 브라우저 확장(MV3) 설계 (월드 구조·manifest·MSE/Blob 후킹·webRequest·다운로드·UI·호환성·스토어 준법) |
+| 11 | [11-segment-remux.md](./11-segment-remux.md) | 세그먼트 재조합·Remux 상세 (concat vs remux vs transcode, ISOBMFF/TS 박스, 결정 트리, ffmpeg.wasm 옵트인, 스트리밍 저장) |
+
+> 참조 구현(스캐폴드): [`extension/`](../../extension) — MV3 확장(공유 코어 `core/` + 후킹/백그라운드/팝업). [`extension/README.md`](../../extension/README.md) 참조.
 
 ## 용어
 

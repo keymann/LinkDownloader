@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Media Eligibility Inspector</title>
+    <style>
+      body { width: 360px; margin: 0; font: 13px/1.4 -apple-system, 'Noto Sans KR', sans-serif; background:#0b1220; color:#e7ecf5; }
+      header { padding: 12px 14px; border-bottom:1px solid #26324c; font-weight:700; }
+      .group { padding: 8px 14px; }
+      .group h4 { margin: 8px 0 6px; font-size:12px; color:#93a0bd; }
+      .item { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:8px; border:1px solid #26324c; border-radius:8px; margin-bottom:6px; }
+      .meta { min-width:0; }
+      .title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .sub { font-size:11px; color:#93a0bd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      button { background:#4f8cff; color:#fff; border:0; border-radius:6px; padding:6px 10px; font-weight:600; cursor:pointer; }
+      .reason { font-size:11px; color:#ff9aa4; }
+      .empty { padding: 20px 14px; color:#93a0bd; }
+    </style>
+  </head>
+  <body>
+    <header>발견된 미디어</header>
+    <div id="root"><div class="empty">스캔 중…</div></div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
