@@ -1,4 +1,5 @@
 // Popup UI (vanilla) — docs/research/10 §9. 판정별 그룹 + 진행 중 다운로드 실시간 표시.
+import { api } from '../env'
 import type { DownloadJob, EligibilityResult, MediaCandidate } from '../core/types'
 
 interface Row {
@@ -91,29 +92,29 @@ function render(): void {
   root.innerHTML = renderJobs() + renderCandidates()
   root.querySelectorAll('button[data-id]').forEach((b) =>
     b.addEventListener('click', () =>
-      chrome.runtime.sendMessage({ rpc: 'download', tabId, candidateId: (b as HTMLElement).dataset.id }),
+      api.runtime.sendMessage({ rpc: 'download', tabId, candidateId: (b as HTMLElement).dataset.id }),
     ),
   )
   root.querySelectorAll('button[data-cancel]').forEach((b) =>
     b.addEventListener('click', () =>
-      chrome.runtime.sendMessage({ rpc: 'cancel', tabId, jobId: (b as HTMLElement).dataset.cancel }),
+      api.runtime.sendMessage({ rpc: 'cancel', tabId, jobId: (b as HTMLElement).dataset.cancel }),
     ),
   )
 }
 
 async function main(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const [tab] = await api.tabs.query({ active: true, currentWindow: true })
   tabId = tab.id!
   const [rowsRes, jobsRes] = await Promise.all([
-    chrome.runtime.sendMessage({ rpc: 'list', tabId }) as Promise<Row[]>,
-    chrome.runtime.sendMessage({ rpc: 'jobs', tabId }) as Promise<DownloadJob[]>,
+    api.runtime.sendMessage({ rpc: 'list', tabId }) as Promise<Row[]>,
+    api.runtime.sendMessage({ rpc: 'jobs', tabId }) as Promise<DownloadJob[]>,
   ])
   rows = rowsRes ?? []
   for (const j of jobsRes ?? []) jobs.set(j.id, j)
   render()
 
   // 진행률 실시간 반영
-  chrome.runtime.onMessage.addListener((msg: { type?: string; job?: DownloadJob }) => {
+  api.runtime.onMessage.addListener((msg: { type?: string; job?: DownloadJob }) => {
     if (msg?.type === 'job-update' && msg.job && msg.job.tabId === tabId) {
       jobs.set(msg.job.id, msg.job)
       render()

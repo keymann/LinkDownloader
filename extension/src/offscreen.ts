@@ -1,7 +1,10 @@
-// Offscreen document — docs/research/10 §6, 11 §5.
-// service worker에 없는 기능 대행: (1) DOMParser(DASH), (2) Blob/OPFS 스트리밍 재조합.
+// Offscreen document (Chrome 전용) — service worker에 없는 DOM/Blob 기능 대행.
+// DASH 파싱(DOMParser)과 세그먼트 재조합(OPFS/createObjectURL)을 수행.
+// 실제 로직은 컨텍스트 중립 모듈(core/dash, assemble-store)에 있고 여기선 메시지 어댑터.
+import { api } from './env'
+import { assembleToBlobUrl, revokeBlobUrl } from './assemble-store'
 import { parseDash } from './core/dash'
-import { assemble, assembleToWriter, type AssemblePlan } from './core/remux'
+import type { AssemblePlan } from './core/remux'
 
 type Msg =
   | { target: 'offscreen'; kind: 'parse-dash'; xml: string; base: string }
@@ -9,73 +12,9 @@ type Msg =
   | { target: 'offscreen'; kind: 'cancel'; jobId: string }
   | { target: 'offscreen'; kind: 'revoke'; blobUrl: string }
 
-// jobId → 재조합 중단용 AbortController
 const controllers = new Map<string, AbortController>()
 
-// blobUrl → OPFS 파일명(다운로드 완료 후 revoke + 파일 삭제로 정리)
-const alive = new Map<string, string | null>()
-
-function uid(): string {
-  const a = new Uint8Array(8)
-  crypto.getRandomValues(a)
-  return [...a].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-// 재조합 진행률을 broadcast(background/popup 구독). jobId로 작업 식별.
-function emitProgress(jobId: string | undefined, done: number, total: number, bytes: number): void {
-  if (!jobId) return
-  void chrome.runtime.sendMessage({ type: 'dl-progress', jobId, done, total, bytes })
-}
-
-// OPFS로 스트리밍 재조합(상수 메모리). 미지원 시 Blob 조립으로 폴백.
-async function assembleStreaming(
-  plan: AssemblePlan,
-  jobId: string | undefined,
-  signal: AbortSignal,
-): Promise<{ blobUrl: string; size: number }> {
-  const onProgress = (done: number, total: number, bytes: number) => emitProgress(jobId, done, total, bytes)
-  const getDir = navigator.storage?.getDirectory?.bind(navigator.storage)
-  if (!getDir) {
-    const blob = await assemble(plan, { onProgress, signal }) // 폴백: 메모리 Blob
-    const url = URL.createObjectURL(blob)
-    alive.set(url, null)
-    return { blobUrl: url, size: blob.size }
-  }
-  const name = `dl-${uid()}.part`
-  const root = await getDir()
-  const handle = await root.getFileHandle(name, { create: true })
-  const writable = await handle.createWritable()
-  const writer = writable.getWriter()
-  try {
-    await assembleToWriter(plan, (chunk) => writer.write(chunk as unknown as BufferSource), { onProgress, signal })
-    await writer.close()
-  } catch (e) {
-    try {
-      await writer.abort()
-    } catch {
-      /* ignore */
-    }
-    await root.removeEntry(name).catch(() => {})
-    throw e
-  }
-  const file = await handle.getFile() // 디스크 기반 File → createObjectURL은 지연 참조(메모리 절약)
-  const url = URL.createObjectURL(file)
-  alive.set(url, name)
-  return { blobUrl: url, size: file.size }
-}
-
-async function cleanup(blobUrl: string): Promise<void> {
-  if (!alive.has(blobUrl)) return
-  const name = alive.get(blobUrl)!
-  URL.revokeObjectURL(blobUrl)
-  alive.delete(blobUrl)
-  if (name) {
-    const root = await navigator.storage.getDirectory()
-    await root.removeEntry(name).catch(() => {})
-  }
-}
-
-chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
+api.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
   if (msg?.target !== 'offscreen') return
 
   if (msg.kind === 'parse-dash') {
@@ -90,7 +29,9 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
   if (msg.kind === 'assemble') {
     const ac = new AbortController()
     if (msg.jobId) controllers.set(msg.jobId, ac)
-    assembleStreaming(msg.plan, msg.jobId, ac.signal)
+    const onProgress = (done: number, total: number, bytes: number) =>
+      void api.runtime.sendMessage({ type: 'dl-progress', jobId: msg.jobId, done, total, bytes })
+    assembleToBlobUrl(msg.plan, { onProgress, signal: ac.signal })
       .then(({ blobUrl, size }) => reply({ ok: true, blobUrl, size }))
       .catch((e) => reply({ ok: false, error: (e as Error).message, aborted: (e as Error).name === 'AbortError' }))
       .finally(() => {
@@ -106,7 +47,7 @@ chrome.runtime.onMessage.addListener((msg: Msg, _sender, reply) => {
   }
 
   if (msg.kind === 'revoke') {
-    cleanup(msg.blobUrl)
+    revokeBlobUrl(msg.blobUrl)
       .then(() => reply({ ok: true }))
       .catch(() => reply({ ok: false }))
     return true

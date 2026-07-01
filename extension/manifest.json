@@ -5,7 +5,10 @@
   "description": "웹페이지 미디어를 탐지하고 다운로드 적격성(비DRM·비암호화)을 판정한다. DRM/암호화/ToS 우회 없음.",
   "permissions": ["downloads", "storage", "scripting", "activeTab", "webRequest", "notifications", "offscreen"],
   "optional_host_permissions": ["*://*/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
+  "background": { "service_worker": "background.js", "scripts": ["background.js"], "type": "module" },
+  "browser_specific_settings": {
+    "gecko": { "id": "media-eligibility-inspector@example.org", "strict_min_version": "128.0" }
+  },
   "action": { "default_popup": "popup/popup.html", "default_title": "Media Eligibility Inspector" },
   "icons": { "128": "icons/128.png" },
   "content_scripts": [
