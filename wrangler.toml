@@ -1,3 +1,8 @@
+# 이 프로젝트는 Cloudflare **Pages** 프로젝트다 (Workers 아님).
+# 따라서 배포는 반드시 `wrangler pages deploy` 를 사용한다. `wrangler deploy`(Workers 전용)는 오류가 난다.
+# Cloudflare 대시보드 빌드 설정:
+#   - Build command : npm run build
+#   - Deploy command: npx wrangler pages deploy   (또는 비워두고 Build output = dist)
 name = "link-downloader"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "dist"
@@ -6,4 +11,5 @@ pages_build_output_dir = "dist"
 # 프로덕션 배포 전 `wrangler kv namespace create LINKDL_KV`로 생성 후 아래 id를 채운다.
 [[kv_namespaces]]
 binding = "LINKDL_KV"
-id = "REPLACE_WITH_PRODUCTION_KV_ID"
+id = "7646327020a142b68c982ea3cfda9f3d"          # 프로덕션
+preview_id = "83c9668bfe47445cbc4f893f424dec88"  # 프리뷰(브랜치/PR 배포)
