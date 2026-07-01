@@ -47,7 +47,9 @@ npm run watch          # 개발 중 자동 재빌드
 
 ## 스캐폴드 TODO (프로덕션화 시)
 
-- [ ] DASH offscreen 파서(`chrome.offscreen` + `core/dash.parseDash`) 연결
+- [x] DASH offscreen 파서(`chrome.offscreen` + `core/dash.parseDash`) 연결
+      — `src/offscreen.ts`(+`offscreen.html`)에서 `parseDash` 수행, `background.ts`가
+      `ensureOffscreen()`/`parseDashViaOffscreen()`로 위임. `offscreen` 권한 추가.
 - [ ] HLS master→media 2차 fetch/파싱 체인
 - [ ] `core/remux.assemble`로 세그먼트 재조합(스트리밍 저장/OPFS), 대용량 대응
 - [ ] robots/ToS 정책 테이블 로드(`chrome.storage.local`) 및 준법 검토 프로세스
