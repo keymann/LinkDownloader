@@ -1,4 +1,5 @@
-// Popup UI (vanilla) — docs/research/10 §9. 판정별 그룹 + 진행 중 다운로드 실시간 표시.
+// Popup UI (vanilla, DOM 빌더) — docs/research/10 §9.
+// 판정별 그룹 + 진행 중 다운로드 실시간 진행바/취소. innerHTML 미사용(안전).
 import { api } from '../env'
 import type { DownloadJob, EligibilityResult, MediaCandidate } from '../core/types'
 
@@ -20,86 +21,109 @@ let tabId = -1
 let rows: Row[] = []
 const jobs = new Map<string, DownloadJob>()
 
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+// --- 안전한 DOM 빌더(textContent 기반) ---
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  opts: { class?: string; text?: string } = {},
+  children: (Node | null)[] = [],
+): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag)
+  if (opts.class) e.className = opts.class
+  if (opts.text != null) e.textContent = opts.text
+  for (const c of children) if (c) e.append(c)
+  return e
 }
+
 function fmtBytes(n: number): string {
   if (!n) return ''
   const u = ['B', 'KB', 'MB', 'GB']
   const i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)))
   return `${(n / 1024 ** i).toFixed(i ? 1 : 0)} ${u[i]}`
 }
-
 function jobPercent(j: DownloadJob): number | null {
   if (j.phase === 'done') return 100
   if (j.phase === 'assembling' && j.total > 0) return Math.round((j.done / j.total) * 100)
-  return null // downloading/indeterminate
+  return null
 }
 
-function renderJobs(): string {
-  const list = [...jobs.values()]
-  if (!list.length) return ''
-  return `<div class="group"><h4>다운로드</h4>${list
-    .map((j) => {
-      const pct = jobPercent(j)
-      const sub =
-        j.phase === 'assembling'
-          ? `${j.done}/${j.total} 세그먼트${j.bytes ? ` · ${fmtBytes(j.bytes)}` : ''}`
-          : j.phase === 'error'
-            ? esc(j.error || '오류')
-            : PHASE_LABEL[j.phase]
-      const active = j.phase === 'assembling' || j.phase === 'downloading'
-      return `<div class="item">
-        <div class="meta" style="flex:1;min-width:0">
-          <div class="title">${esc(j.title)} <small>[${PHASE_LABEL[j.phase]}]</small></div>
-          <div class="bar"><div class="fill${pct == null && j.phase !== 'done' ? ' indet' : ''}" style="width:${pct ?? 100}%"></div></div>
-          <div class="sub">${sub}</div>
-        </div>
-        ${active ? `<button class="ghost" data-cancel="${esc(j.id)}">취소</button>` : ''}
-      </div>`
-    })
-    .join('')}</div>`
+function barNode(j: DownloadJob): HTMLElement {
+  const pct = jobPercent(j)
+  const fill = el('div', { class: 'fill' + (pct == null && j.phase !== 'done' ? ' indet' : '') })
+  fill.style.width = `${pct ?? 100}%`
+  return el('div', { class: 'bar' }, [fill])
 }
 
-function renderCandidates(): string {
-  if (!rows.length) return '<div class="empty">이 페이지에서 발견된 미디어가 없습니다.</div>'
-  const groups: Record<string, Row[]> = { ELIGIBLE: [], CONDITIONAL: [], INELIGIBLE: [], SKIP: [] }
-  for (const r of rows) groups[r.eligibility.verdict].push(r)
-  const section = (title: string, list: Row[], showBtn: boolean) =>
-    list.length
-      ? `<div class="group"><h4>${title}</h4>${list
-          .map(
-            (r) => `<div class="item">
-              <div class="meta">
-                <div class="title">${esc(r.candidate.url ?? r.candidate.pageUrl ?? '미디어')} <small>[${KIND_BADGE[r.candidate.kind]}]</small></div>
-                <div class="sub">${esc(r.candidate.origin)}${r.candidate.signals.mse ? ' · MSE' : ''}${r.candidate.note ? ` · ${esc(r.candidate.note)}` : ''}${r.eligibility.verdict !== 'ELIGIBLE' ? ` · <span class="reason">${esc(r.eligibility.reason)}</span>` : ''}</div>
-              </div>
-              ${showBtn ? `<button data-id="${esc(r.candidate.id)}">저장</button>` : ''}
-            </div>`,
-          )
-          .join('')}</div>`
-      : ''
-  return (
-    section('✅ 다운로드 가능', groups.ELIGIBLE, true) +
-    section('⚠️ 조건부', groups.CONDITIONAL, false) +
-    section('❌ 불가', groups.INELIGIBLE, false) +
-    section('⏭️ 정책 제외', groups.SKIP, false)
-  )
+function jobNode(j: DownloadJob): HTMLElement {
+  const active = j.phase === 'assembling' || j.phase === 'downloading'
+  const sub =
+    j.phase === 'assembling'
+      ? `${j.done}/${j.total} 세그먼트${j.bytes ? ` · ${fmtBytes(j.bytes)}` : ''}`
+      : j.phase === 'error'
+        ? j.error || '오류'
+        : PHASE_LABEL[j.phase]
+  const title = el('div', { class: 'title' }, [
+    document.createTextNode(`${j.title} `),
+    el('small', { text: `[${PHASE_LABEL[j.phase]}]` }),
+  ])
+  const meta = el('div', { class: 'meta' }, [title, barNode(j), el('div', { class: 'sub', text: sub })])
+  meta.style.flex = '1'
+  meta.style.minWidth = '0'
+  const item = el('div', { class: 'item' }, [meta])
+  if (active) {
+    const btn = el('button', { class: 'ghost', text: '취소' })
+    btn.onclick = () => void api.runtime.sendMessage({ rpc: 'cancel', tabId, jobId: j.id })
+    item.append(btn)
+  }
+  return item
+}
+
+function candidateNode(r: Row, showBtn: boolean): HTMLElement {
+  const c = r.candidate
+  const title = el('div', { class: 'title' }, [
+    document.createTextNode(`${c.url ?? c.pageUrl ?? '미디어'} `),
+    el('small', { text: `[${KIND_BADGE[c.kind]}]` }),
+  ])
+  const subParts: string[] = [c.origin]
+  if (c.signals.mse) subParts.push('MSE')
+  if (c.note) subParts.push(c.note)
+  const sub = el('div', { class: 'sub', text: subParts.join(' · ') })
+  if (r.eligibility.verdict !== 'ELIGIBLE') {
+    sub.append(document.createTextNode(' · '), el('span', { class: 'reason', text: r.eligibility.reason }))
+  }
+  const item = el('div', { class: 'item' }, [el('div', { class: 'meta' }, [title, sub])])
+  if (showBtn) {
+    const btn = el('button', { text: '저장' })
+    btn.onclick = () => void api.runtime.sendMessage({ rpc: 'download', tabId, candidateId: c.id })
+    item.append(btn)
+  }
+  return item
+}
+
+function groupNode(title: string, nodes: HTMLElement[]): HTMLElement | null {
+  if (!nodes.length) return null
+  return el('div', { class: 'group' }, [el('h4', { text: title }), ...nodes])
 }
 
 function render(): void {
   const root = document.getElementById('root')!
-  root.innerHTML = renderJobs() + renderCandidates()
-  root.querySelectorAll('button[data-id]').forEach((b) =>
-    b.addEventListener('click', () =>
-      api.runtime.sendMessage({ rpc: 'download', tabId, candidateId: (b as HTMLElement).dataset.id }),
-    ),
-  )
-  root.querySelectorAll('button[data-cancel]').forEach((b) =>
-    b.addEventListener('click', () =>
-      api.runtime.sendMessage({ rpc: 'cancel', tabId, jobId: (b as HTMLElement).dataset.cancel }),
-    ),
-  )
+  root.replaceChildren()
+
+  const jobGroup = groupNode('다운로드', [...jobs.values()].map(jobNode))
+  if (jobGroup) root.append(jobGroup)
+
+  if (!rows.length) {
+    root.append(el('div', { class: 'empty', text: '이 페이지에서 발견된 미디어가 없습니다.' }))
+    return
+  }
+  const g: Record<string, Row[]> = { ELIGIBLE: [], CONDITIONAL: [], INELIGIBLE: [], SKIP: [] }
+  for (const r of rows) g[r.eligibility.verdict].push(r)
+  const sections: (HTMLElement | null)[] = [
+    groupNode('✅ 다운로드 가능', g.ELIGIBLE.map((r) => candidateNode(r, true))),
+    groupNode('⚠️ 조건부', g.CONDITIONAL.map((r) => candidateNode(r, false))),
+    groupNode('❌ 불가', g.INELIGIBLE.map((r) => candidateNode(r, false))),
+    groupNode('⏭️ 정책 제외', g.SKIP.map((r) => candidateNode(r, false))),
+  ]
+  for (const s of sections) if (s) root.append(s)
 }
 
 async function main(): Promise<void> {
@@ -113,7 +137,6 @@ async function main(): Promise<void> {
   for (const j of jobsRes ?? []) jobs.set(j.id, j)
   render()
 
-  // 진행률 실시간 반영
   api.runtime.onMessage.addListener((msg: { type?: string; job?: DownloadJob }) => {
     if (msg?.type === 'job-update' && msg.job && msg.job.tabId === tabId) {
       jobs.set(msg.job.id, msg.job)

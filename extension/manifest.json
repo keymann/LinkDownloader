@@ -7,10 +7,13 @@
   "optional_host_permissions": ["*://*/*"],
   "background": { "service_worker": "background.js", "scripts": ["background.js"], "type": "module" },
   "browser_specific_settings": {
-    "gecko": { "id": "media-eligibility-inspector@example.org", "strict_min_version": "128.0" }
+    "gecko": {
+      "id": "media-eligibility-inspector@example.org",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
   },
   "action": { "default_popup": "popup/popup.html", "default_title": "Media Eligibility Inspector" },
-  "icons": { "128": "icons/128.png" },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
